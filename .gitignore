@@ -1,0 +1,15 @@
+# Node
+node_modules/
+client/node_modules/
+
+# Env
+.env
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# Build
+dist/
+client/dist/
+
