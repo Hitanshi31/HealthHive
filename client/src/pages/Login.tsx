@@ -15,6 +15,11 @@ const Login: React.FC = () => {
         try {
             const res = await api.post('/auth/login', { email, password });
             saveToken(res.data.token);
+
+            // Save identifiers
+            if (res.data.doctorCode) localStorage.setItem('doctorCode', res.data.doctorCode);
+            if (res.data.patientCode) localStorage.setItem('patientCode', res.data.patientCode);
+
             const role = getUserRole();
             if (role === 'PATIENT') navigate('/dashboard');
             else if (role === 'DOCTOR') navigate('/doctor');

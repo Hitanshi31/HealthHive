@@ -14,8 +14,12 @@ const Register: React.FC = () => {
         e.preventDefault();
         setLoading(true);
         try {
-            await api.post('/auth/register', { email, password, role });
-            alert('Registration successful! Please login.');
+            const res = await api.post('/auth/register', { email, password, role });
+            if (res.data.doctorCode) {
+                alert(`Registration successful! Your Doctor ID is: ${res.data.doctorCode}. Please login.`);
+            } else {
+                alert('Registration successful! Please login.');
+            }
             navigate('/login');
         } catch (err) {
             alert('Registration failed.');

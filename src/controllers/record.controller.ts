@@ -42,19 +42,17 @@ export const uploadRecord = async (userRequest: Request, res: Response): Promise
 
         if (hasFile) {
             // 3) STRICT INPUT-DRIVEN CREATION (File)
-            recordData.filePath = `uploads/${file.filename}`;
+            recordData.filePath = file.path;
 
-            // If user provided summary, use it (Rule: "Use both as-is").
-            // Otherwise, set specific pending message.
-            if (summary) {
-                recordData.summary = summary;
-            } else {
-                recordData.summary = "Summary pending (uploaded document)";
+            // Strict: Use provided summary or null. No defaults.
+            recordData.summary = summary || null;
+
+            // Strict: Type is required. No "DOCUMENT" default.
+            if (!type) {
+                res.status(400).json({ error: 'Type is required' });
+                return;
             }
-
-            // Default type to DOCUMENT if not provided for file uploads
-            // (Minimal structural requirement, not fake medical data)
-            recordData.type = type || "DOCUMENT";
+            recordData.type = type;
         } else {
             // 3) STRICT INPUT-DRIVEN CREATION (Metadata Only)
             // Use PROVIDED values only. No file path.

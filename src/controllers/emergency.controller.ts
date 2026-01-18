@@ -52,26 +52,27 @@ export const generateQR = async (userRequest: Request, res: Response): Promise<v
         expiresAt.setHours(expiresAt.getHours() + 24);
 
         // Update or Create the profile with the new token
-        // We assume the profile might not exist, so we need to handle that.
-        // However, upsert requires all fields. 
-        // Strategy: Try update. If 'Record to update not found', return error "Profile Setup Required".
-
         try {
-            const profile = await prisma.emergencyProfile.update({
+            const profile = await prisma.emergencyProfile.upsert({
                 where: { patientId: req.user.userId },
-                data: {
+                update: {
                     qrToken,
                     expiresAt
+                },
+                create: {
+                    patientId: req.user.userId,
+                    qrToken,
+                    expiresAt,
+                    bloodGroup: 'Not Specified',
+                    allergies: 'None',
+                    chronicConditions: 'None',
+                    activeMedications: 'None'
                 }
             });
             res.status(201).json({ qrToken, expiresAt, message: "Emergency QR generated successfully" });
         } catch (dbError: any) {
-            // Prisma error code for "Record to update not found" is usually P2025
-            if (dbError.code === 'P2025') {
-                res.status(404).json({ error: 'Emergency profile not found. Please set up your profile first.' });
-            } else {
-                throw dbError;
-            }
+            console.error("DB Error:", dbError);
+            res.status(500).json({ error: 'Failed to generate QR. Ensure profile exists or schema support.' });
         }
 
     } catch (error) {

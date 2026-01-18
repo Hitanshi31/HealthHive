@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import api, { getUserId } from '../services/api';
 import Navbar from '../components/Navbar';
-import { Shield, FileText, Activity, Users, AlertTriangle, QrCode, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock } from 'lucide-react';
+import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 
 const PatientDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState('records');
@@ -9,7 +10,25 @@ const PatientDashboard: React.FC = () => {
     const [consents, setConsents] = useState<any[]>([]);
     const [newDoctorId, setNewDoctorId] = useState('');
     const [userId] = useState(getUserId());
+    const [qrToken, setQrToken] = useState<string | null>(null);
+    const [qrExpires, setQrExpires] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (activeTab === 'emergency' && !qrToken) {
+            generateEmergencyQR();
+        }
+    }, [activeTab]);
+
+    const generateEmergencyQR = async () => {
+        try {
+            const res = await api.post('/emergency/generate');
+            setQrToken(res.data.qrToken);
+            setQrExpires(res.data.expiresAt);
+        } catch (e) {
+            console.error("Failed to generate QR", e);
+        }
+    };
 
     useEffect(() => {
         fetchRecords();
@@ -30,20 +49,41 @@ const PatientDashboard: React.FC = () => {
         } catch (e) { console.error(e); }
     }
 
-    const handleUpload = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const handleUploadClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+
+        const file = e.target.files[0];
+
+        // Simple prompt for record type (since backend requires it)
+        const typeInput = window.prompt("Enter Record Type (e.g., LAB_REPORT, PRESCRIPTION, MRI):", "LAB_REPORT");
+        if (!typeInput) return; // Cancelled
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('type', typeInput.toUpperCase().replace(' ', '_'));
+        formData.append('isComplete', 'true');
+        // formData.append('summary', ''); // Let backend handle empty summary (will become null)
+
         setLoading(true);
-        // Simulate upload delay
-        setTimeout(async () => {
-            await api.post('/records', {
-                type: 'LAB_REPORT',
-                summary: 'Complete Blood Count (CBC) - AI Note: Hemoglobin levels 13.5 g/dL (Normal). White blood cell count slightly elevated.',
-                source: 'Metropolis Labs',
-                isComplete: true
+        try {
+            await api.post('/records', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
             });
             await fetchRecords();
+            alert('Upload Successful!');
+        } catch (error) {
+            console.error(error);
+            alert('Upload failed. Please try again.');
+        } finally {
             setLoading(false);
-        }, 1000);
+            if (fileInputRef.current) fileInputRef.current.value = ''; // Reset input
+        }
     };
 
     const handleGrantConsent = async () => {
@@ -91,8 +131,8 @@ const PatientDashboard: React.FC = () => {
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${activeTab === tab
-                                        ? (tab === 'emergency' ? 'bg-red-600 text-white shadow-md' : 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200')
-                                        : 'text-slate-500 hover:bg-slate-200/50 hover:text-slate-700'
+                                    ? (tab === 'emergency' ? 'bg-red-600 text-white shadow-md' : 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200')
+                                    : 'text-slate-500 hover:bg-slate-200/50 hover:text-slate-700'
                                     }`}
                             >
                                 {tab === 'records' && <FileText size={18} />}
@@ -150,7 +190,14 @@ const PatientDashboard: React.FC = () => {
                                                 </div>
                                                 <div className="flex-1 pr-20">
                                                     <h3 className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                                                        {r.type.replace('_', ' ')}
+                                                        <a
+                                                            href={`http://localhost:3000/uploads/${r.filePath ? r.filePath.split(/[\\/]/).pop() : ''}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="hover:underline"
+                                                        >
+                                                            {r.type.replace('_', ' ')}
+                                                        </a>
                                                     </h3>
                                                     <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-medium text-slate-500 uppercase tracking-wide">
                                                         <span className="flex items-center gap-1"><Clock size={12} /> {new Date(r.createdAt).toLocaleDateString()}</span>
@@ -183,16 +230,23 @@ const PatientDashboard: React.FC = () => {
                                     <p className="text-sm text-slate-500 mb-4">Securely upload lab reports or prescriptions.</p>
 
                                     <button
-                                        onClick={handleUpload}
+                                        onClick={handleUploadClick}
                                         disabled={loading}
                                         className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-bold transition-all shadow-md disabled:opacity-70"
                                     >
                                         {loading ? (
-                                            <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Processing...</span>
+                                            <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Uploading...</span>
                                         ) : (
                                             <><Plus size={20} /> Upload File</>
                                         )}
                                     </button>
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleFileSelect}
+                                        className="hidden"
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                    />
                                     <p className="text-xs text-center text-slate-400 mt-3">Supports PDF, JPG, PNG (Max 10MB)</p>
                                 </div>
 
@@ -295,9 +349,21 @@ const PatientDashboard: React.FC = () => {
                                 </div>
 
                                 <div className="p-10 flex flex-col items-center">
-                                    <div className="bg-white p-4 rounded-2xl shadow-inner border-4 border-slate-100">
-                                        {/* Mock QR */}
-                                        <QrCode size={200} className="text-slate-900" />
+                                    <div className="bg-white p-4 rounded-2xl shadow-inner border-4 border-slate-100 flex flex-col items-center">
+                                        {qrToken ? (
+                                            <>
+                                                <QRCodeCanvas value={`${window.location.origin}/emergency/${qrToken}`} size={200} />
+                                                {qrExpires && (
+                                                    <p className="text-[10px] text-red-500 font-bold mt-2 uppercase tracking-wide">
+                                                        Expires: {new Date(qrExpires).toLocaleTimeString()}
+                                                    </p>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <div className="w-[200px] h-[200px] flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg">
+                                                <QrIcon size={64} className="animate-pulse" />
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="mt-8 text-center space-y-4 w-full">
@@ -305,14 +371,16 @@ const PatientDashboard: React.FC = () => {
                                             <Shield size={12} /> Secure • Logged • Time-Limited
                                         </div>
 
-                                        <a
-                                            href={`http://localhost:5173/emergency/EMERGENCY-TOKEN-${userId?.substring(0, 8)}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="block w-full max-w-sm mx-auto py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 transform hover:scale-105"
-                                        >
-                                            <ChevronRight size={18} /> Simulate Scan
-                                        </a>
+                                        {qrToken && (
+                                            <a
+                                                href={`${window.location.origin}/emergency/${qrToken}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="block w-full max-w-sm mx-auto py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 transform hover:scale-105"
+                                            >
+                                                <ChevronRight size={18} /> Simulate Scan
+                                            </a>
+                                        )}
                                     </div>
                                 </div>
                             </div>

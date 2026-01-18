@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
-import { Search, FileText, AlertTriangle, UserCheck, Calendar, Activity, Lock, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
+import { Search, FileText, AlertTriangle, UserCheck, Calendar, Activity, Lock, ArrowRight, ShieldCheck, Clock, CheckCircle2, Copy } from 'lucide-react';
 
 const DoctorDashboard: React.FC = () => {
     const [patientId, setPatientId] = useState('');
@@ -31,6 +31,19 @@ const DoctorDashboard: React.FC = () => {
             <main className="max-w-6xl mx-auto px-4 py-12">
                 <div className="text-center mb-12">
                     <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Doctor Access Portal</h1>
+
+                    {/* Doctor ID Display */}
+                    <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 px-4 py-2 rounded-full mb-4 cursor-pointer hover:bg-blue-100 transition-colors"
+                        onClick={() => {
+                            const code = localStorage.getItem('doctorCode') || 'DOC-PENDING';
+                            navigator.clipboard.writeText(code);
+                            alert('Doctor ID copied to clipboard!');
+                        }}>
+                        <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">My Doctor ID:</span>
+                        <span className="text-sm font-mono font-bold text-blue-800">{localStorage.getItem('doctorCode') || 'Not Assigned'}</span>
+                        <Copy size={14} className="text-blue-500" />
+                    </div>
+
                     <p className="text-slate-500 max-w-lg mx-auto">
                         Securely access patient records for diagnosis and treatment. All access events are strictly audited and logged.
                     </p>
@@ -140,7 +153,7 @@ const DoctorDashboard: React.FC = () => {
                                         <div className="flex justify-between items-start mb-2">
                                             <h4 className="font-bold text-lg text-slate-900">{r.type.replace('_', ' ')}</h4>
                                             <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wider uppercase border ${r.trustIndicator === 'GREEN' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                    'bg-amber-50 text-amber-700 border-amber-200'
+                                                'bg-amber-50 text-amber-700 border-amber-200'
                                                 }`}>
                                                 {r.trustIndicator === 'GREEN' ? 'Verified Source' : 'External/Old'}
                                             </span>
@@ -163,6 +176,6 @@ const DoctorDashboard: React.FC = () => {
         </div>
     );
 };
-import { CheckCircle2 } from 'lucide-react'; // Added missing import
+
 
 export default DoctorDashboard;

@@ -6,14 +6,25 @@ const prisma = new PrismaClient();
 export const grantConsent = async (userRequest: Request, res: Response): Promise<void> => { // Explicitly return void
     const req = userRequest as Request & { user: { userId: string } };
     try {
-        const { doctorId, validUntil } = req.body;
+        let { doctorId, validUntil } = req.body;
+        let finalDoctorId = doctorId;
 
-        // Validate that doctor exists and is a doctor (omitted for brevity)
+        // Resolve Doctor Code (DOC-XXXXX) to User UUID if needed
+        if (doctorId.startsWith('DOC-')) {
+            const doctorUser = await prisma.user.findUnique({
+                where: { doctorCode: doctorId } as any
+            });
+            if (!doctorUser) {
+                res.status(404).json({ error: 'Doctor not found with that ID' });
+                return;
+            }
+            finalDoctorId = doctorUser.id;
+        }
 
         const consent = await prisma.consent.create({
             data: {
                 patientId: req.user.userId,
-                doctorId,
+                doctorId: finalDoctorId,
                 validFrom: new Date(),
                 validUntil: new Date(validUntil),
                 status: 'ACTIVE'
