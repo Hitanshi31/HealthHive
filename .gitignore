@@ -13,3 +13,8 @@ prisma/dev.db-journal
 dist/
 client/dist/
 
+
+uploads/
+scripts/reproduce_issue.ts
+
+

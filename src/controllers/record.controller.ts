@@ -12,23 +12,67 @@ const getTrustIndicator = (record: any) => {
 };
 
 export const uploadRecord = async (userRequest: Request, res: Response): Promise<void> => {
-    const req = userRequest as Request & { user: { userId: string; role: string } };
+    const req = userRequest as Request & { user: { userId: string; role: string }, file?: any };
 
     try {
         const { type, summary, source, isComplete } = req.body;
-        // In a real app, we'd handle file upload here (req.file)
-        // For now, we simulate a file path
-        const filePath = `/uploads/${Date.now()}_mock_file.pdf`;
+        const file = req.file;
 
+        // 1) NO DATA = NO RECORD
+        // Request must include at least ONE of: Uploaded file OR explicit metadata
+        const hasFile = !!file;
+        const hasMetadata = !!(type || summary || source);
+
+        if (!hasFile && !hasMetadata) {
+            res.status(400).json({ error: 'No medical data provided' });
+            return;
+        }
+
+        // 2) ZERO DEFAULTS POLICY
+        // Initialize with strict defaults (mostly null/false)
+        let recordData: any = {
+            patientId: req.user.userId,
+            // Do NOT default isComplete to true. Use user input or false.
+            isComplete: isComplete === 'true' || isComplete === true,
+            source: source || null, // No default lab names
+        };
+
+        // Explicitly set filePath to null if no file, though let recordData handle it.
+        recordData.filePath = null;
+
+        if (hasFile) {
+            // 3) STRICT INPUT-DRIVEN CREATION (File)
+            recordData.filePath = `uploads/${file.filename}`;
+
+            // If user provided summary, use it (Rule: "Use both as-is").
+            // Otherwise, set specific pending message.
+            if (summary) {
+                recordData.summary = summary;
+            } else {
+                recordData.summary = "Summary pending (uploaded document)";
+            }
+
+            // Default type to DOCUMENT if not provided for file uploads
+            // (Minimal structural requirement, not fake medical data)
+            recordData.type = type || "DOCUMENT";
+        } else {
+            // 3) STRICT INPUT-DRIVEN CREATION (Metadata Only)
+            // Use PROVIDED values only. No file path.
+            recordData.filePath = null; // STRICT: Nullable in schema
+
+            // Type is mandatory for manual entry
+            if (!type) {
+                res.status(400).json({ error: 'Type is required for manual entries' });
+                return;
+            }
+            recordData.type = type;
+            recordData.summary = summary || null; // No auto-fill
+        }
+
+        // 4) SINGLE INSERT GUARANTEE
+        // Create exactly ONE record.
         const record = await prisma.medicalRecord.create({
-            data: {
-                patientId: req.user.userId,
-                type,
-                filePath,
-                summary: summary || "AI Summary Pending...",
-                source,
-                isComplete: Boolean(isComplete),
-            },
+            data: recordData,
         });
 
         // Log Audit
@@ -44,6 +88,7 @@ export const uploadRecord = async (userRequest: Request, res: Response): Promise
 
         res.status(201).json(record);
     } catch (error) {
+        console.error("Upload error:", error);
         res.status(500).json({ error: 'Upload failed' });
     }
 };
@@ -52,11 +97,58 @@ export const getRecords = async (userRequest: Request, res: Response): Promise<v
     const req = userRequest as Request & { user: { userId: string; role: string } };
 
     try {
-        // Doctors can access if they have consent. Implementation of consent check is simplified here for brevity, 
-        // but in production, we would query the Consent table.
+        const { userId, role } = req.user;
+        let whereCondition: any = {};
+
+        if (role === 'PATIENT') {
+            whereCondition = { patientId: userId };
+        } else if (role === 'DOCTOR') {
+            const patientId = req.query.patientId as string;
+
+            if (!patientId) {
+                res.status(400).json({ error: 'Patient ID is required' });
+                return;
+            }
+
+            // Verify Consent
+            const consent = await prisma.consent.findFirst({
+                where: {
+                    doctorId: userId,
+                    patientId: patientId,
+                    status: 'ACTIVE',
+                    validFrom: { lte: new Date() },
+                    validUntil: { gte: new Date() }
+                }
+            });
+
+            if (!consent) {
+                res.status(403).json({ error: 'Access denied: No active consent found' });
+                return;
+            }
+
+            whereCondition = { patientId: patientId };
+
+            // Log Doctor Access
+            await prisma.auditLog.create({
+                data: {
+                    patientId: patientId,
+                    actorId: userId,
+                    action: "VIEW",
+                    resource: "RECORD_LIST",
+                    purpose: "ROUTINE_CARE",
+                    details: "Doctor viewed patient records"
+                }
+            });
+
+        } else {
+            // Fallback for other roles or unauthorized
+            res.status(403).json({ error: 'Forbidden' });
+            return;
+        }
 
         const records = await prisma.medicalRecord.findMany({
-            where: { patientId: req.user.userId }, // Currently only showing own records for simplicity
+            where: whereCondition,
+            orderBy: { createdAt: 'desc' }
         });
 
         const recordsWithTrust = records.map((r: any) => ({
@@ -66,6 +158,7 @@ export const getRecords = async (userRequest: Request, res: Response): Promise<v
 
         res.json(recordsWithTrust);
     } catch (error) {
+        console.error("Error fetching records:", error);
         res.status(500).json({ error: 'Fetch failed' });
     }
 };

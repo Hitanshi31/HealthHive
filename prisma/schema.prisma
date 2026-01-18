@@ -13,6 +13,7 @@ datasource db {
 model User {
   id            String    @id @default(uuid())
   email         String    @unique
+  patientCode   String?   @unique // Short ID e.g. HH-7F3A2
   password_hash String
   role          String    // "PATIENT" or "DOCTOR"
   createdAt     DateTime  @default(now())
@@ -34,7 +35,7 @@ model MedicalRecord {
   patientId   String
   patient     User     @relation(fields: [patientId], references: [id])
   type        String   // LAB, REPORT, PRESCRIPTION_DOC
-  filePath    String
+  filePath    String?
   summary     String?  // AI generated summary
   source      String?  // Hospital or Lab name
   isComplete  Boolean  @default(true)
