@@ -1,85 +1,86 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import Consent from '../models/Consent';
+import User from '../models/User';
+import AuditLog from '../models/AuditLog';
 
-const prisma = new PrismaClient();
+// Helper to safely access user from request
+const getUser = (req: Request) => (req as any).user;
 
-export const grantConsent = async (userRequest: Request, res: Response): Promise<void> => { // Explicitly return void
-    const req = userRequest as Request & { user: { userId: string } };
+export const grantConsent = async (req: Request, res: Response): Promise<void> => {
     try {
+        const user = getUser(req);
         let { doctorId, validUntil } = req.body;
         let finalDoctorId = doctorId;
 
-        // Resolve Doctor Code (DOC-XXXXX) to User UUID if needed
+        // Resolve Doctor Code (DOC-XXXXX) to User ID if needed
         if (doctorId.startsWith('DOC-')) {
-            const doctorUser = await prisma.user.findUnique({
-                where: { doctorCode: doctorId } as any
-            });
+            const doctorUser = await User.findOne({ doctorCode: doctorId });
             if (!doctorUser) {
                 res.status(404).json({ error: 'Doctor not found with that ID' });
                 return;
             }
-            finalDoctorId = doctorUser.id;
+            finalDoctorId = doctorUser._id;
         }
 
-        const consent = await prisma.consent.create({
-            data: {
-                patientId: req.user.userId,
-                doctorId: finalDoctorId,
-                validFrom: new Date(),
-                validUntil: new Date(validUntil),
-                status: 'ACTIVE'
-            }
+        const consent = await Consent.create({
+            patientId: user.userId,
+            doctorId: finalDoctorId,
+            validFrom: new Date(),
+            validUntil: new Date(validUntil),
+            status: 'ACTIVE'
         });
 
-        await prisma.auditLog.create({
-            data: {
-                patientId: req.user.userId,
-                actorId: req.user.userId,
-                action: "GRANT_CONSENT",
-                resource: "CONSENT",
-                purpose: "PATIENT_REQUEST"
-            }
+        await AuditLog.create({
+            patientId: user.userId,
+            actorId: user.userId,
+            action: "GRANT_CONSENT",
+            resource: "CONSENT",
+            purpose: "PATIENT_REQUEST"
         });
 
         res.status(201).json(consent);
     } catch (error) {
+        console.error("Grant consent error:", error);
         res.status(500).json({ error: 'Granting consent failed' });
     }
 };
 
-export const revokeConsent = async (userRequest: Request, res: Response): Promise<void> => { // Explicitly return void
-    const req = userRequest as Request & { user: { userId: string } };
+export const revokeConsent = async (req: Request, res: Response): Promise<void> => {
     try {
+        const user = getUser(req);
         const { consentId } = req.params;
 
-        const consent = await prisma.consent.update({
-            where: { id: consentId },
-            data: { status: 'REVOKED' }
-        });
+        const consent = await Consent.findByIdAndUpdate(
+            consentId,
+            { status: 'REVOKED' },
+            { new: true }
+        );
 
-        await prisma.auditLog.create({
-            data: {
-                patientId: req.user.userId, // Assuming patient is revoking
-                actorId: req.user.userId,
-                action: "REVOKE_CONSENT",
-                resource: "CONSENT",
-                purpose: "PATIENT_REQUEST"
-            }
+        if (!consent) {
+            res.status(404).json({ error: 'Consent not found' });
+            return;
+        }
+
+        await AuditLog.create({
+            patientId: user.userId,
+            actorId: user.userId,
+            action: "REVOKE_CONSENT",
+            resource: "CONSENT",
+            purpose: "PATIENT_REQUEST"
         });
 
         res.json(consent);
     } catch (error) {
+        console.error("Revoke consent error:", error);
         res.status(500).json({ error: 'Revocation failed' });
     }
 };
 
-export const getConsents = async (userRequest: Request, res: Response): Promise<void> => {
-    const req = userRequest as Request & { user: { userId: string } };
+export const getConsents = async (req: Request, res: Response): Promise<void> => {
     try {
+        const userPayload = getUser(req);
         // Fetch user to match role
-        const user = await prisma.user.findUnique({
-            where: { id: req.user.userId }
-        });
+        const user = await User.findById(userPayload.userId);
 
         if (!user) {
             res.status(404).json({ error: 'User not found' });
@@ -88,14 +89,30 @@ export const getConsents = async (userRequest: Request, res: Response): Promise<
 
         let consents: any[] = [];
         if (user.role === 'PATIENT') {
-            consents = await prisma.consent.findMany({
-                where: { patientId: user.id },
-                include: { doctor: { select: { email: true, id: true } } }
+            const rawConsents = await Consent.find({ patientId: user._id })
+                .populate('doctorId', 'email _id');
+
+            // Map to preserve structure: doctorId (ID) + doctor (Object)
+            consents = rawConsents.map(c => {
+                const doc = c.doctorId as any;
+                return {
+                    ...c.toObject(),
+                    doctorId: doc._id,
+                    doctor: { id: doc._id, email: doc.email }
+                };
             });
+
         } else if (user.role === 'DOCTOR') {
-            consents = await prisma.consent.findMany({
-                where: { doctorId: user.id },
-                include: { patient: { select: { email: true, id: true } } }
+            const rawConsents = await Consent.find({ doctorId: user._id })
+                .populate('patientId', 'email _id');
+
+            consents = rawConsents.map(c => {
+                const pat = c.patientId as any;
+                return {
+                    ...c.toObject(),
+                    patientId: pat._id,
+                    patient: { id: pat._id, email: pat.email }
+                };
             });
         } else {
             consents = [];

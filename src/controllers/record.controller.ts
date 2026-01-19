@@ -1,25 +1,26 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import MedicalRecord from '../models/MedicalRecord';
+import Consent from '../models/Consent';
+import AuditLog from '../models/AuditLog';
 
 // Helper to determine trust color
 const getTrustIndicator = (record: any) => {
+    // record.createdAt is a Date object in Mongoose
     const isRecent = new Date().getTime() - new Date(record.createdAt).getTime() < 30 * 24 * 60 * 60 * 1000; // 30 days
     if (record.isComplete && isRecent) return 'GREEN';
     if (record.isComplete && !isRecent) return 'YELLOW';
     return 'RED';
 };
 
-export const uploadRecord = async (userRequest: Request, res: Response): Promise<void> => {
-    const req = userRequest as Request & { user: { userId: string; role: string }, file?: any };
+const getUser = (req: Request) => (req as any).user;
 
+export const uploadRecord = async (req: Request, res: Response): Promise<void> => {
     try {
+        const user = getUser(req);
         const { type, summary, source, isComplete } = req.body;
         const file = req.file;
 
         // 1) NO DATA = NO RECORD
-        // Request must include at least ONE of: Uploaded file OR explicit metadata
         const hasFile = !!file;
         const hasMetadata = !!(type || summary || source);
 
@@ -29,25 +30,19 @@ export const uploadRecord = async (userRequest: Request, res: Response): Promise
         }
 
         // 2) ZERO DEFAULTS POLICY
-        // Initialize with strict defaults (mostly null/false)
-        let recordData: any = {
-            patientId: req.user.userId,
-            // Do NOT default isComplete to true. Use user input or false.
+        const recordData: any = {
+            patientId: user.userId,
             isComplete: isComplete === 'true' || isComplete === true,
-            source: source || null, // No default lab names
+            source: source || null,
+            filePath: null
         };
-
-        // Explicitly set filePath to null if no file, though let recordData handle it.
-        recordData.filePath = null;
 
         if (hasFile) {
             // 3) STRICT INPUT-DRIVEN CREATION (File)
             recordData.filePath = file.path;
+            recordData.summary = summary || null; // Strict: Use provided summary or null
 
-            // Strict: Use provided summary or null. No defaults.
-            recordData.summary = summary || null;
-
-            // Strict: Type is required. No "DOCUMENT" default.
+            // Strict: Type is required.
             if (!type) {
                 res.status(400).json({ error: 'Type is required' });
                 return;
@@ -55,33 +50,26 @@ export const uploadRecord = async (userRequest: Request, res: Response): Promise
             recordData.type = type;
         } else {
             // 3) STRICT INPUT-DRIVEN CREATION (Metadata Only)
-            // Use PROVIDED values only. No file path.
-            recordData.filePath = null; // STRICT: Nullable in schema
+            recordData.filePath = null;
 
-            // Type is mandatory for manual entry
             if (!type) {
                 res.status(400).json({ error: 'Type is required for manual entries' });
                 return;
             }
             recordData.type = type;
-            recordData.summary = summary || null; // No auto-fill
+            recordData.summary = summary || null;
         }
 
         // 4) SINGLE INSERT GUARANTEE
-        // Create exactly ONE record.
-        const record = await prisma.medicalRecord.create({
-            data: recordData,
-        });
+        const record = await MedicalRecord.create(recordData);
 
         // Log Audit
-        await prisma.auditLog.create({
-            data: {
-                patientId: req.user.userId,
-                actorId: req.user.userId,
-                action: "UPLOAD",
-                resource: "RECORD",
-                purpose: "ROUTINE_CARE"
-            }
+        await AuditLog.create({
+            patientId: user.userId,
+            actorId: user.userId,
+            action: "UPLOAD",
+            resource: "RECORD",
+            purpose: "ROUTINE_CARE"
         });
 
         res.status(201).json(record);
@@ -91,11 +79,10 @@ export const uploadRecord = async (userRequest: Request, res: Response): Promise
     }
 };
 
-export const getRecords = async (userRequest: Request, res: Response): Promise<void> => {
-    const req = userRequest as Request & { user: { userId: string; role: string } };
-
+export const getRecords = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userId, role } = req.user;
+        const user = getUser(req);
+        const { userId, role } = user;
         let whereCondition: any = {};
 
         if (role === 'PATIENT') {
@@ -109,14 +96,13 @@ export const getRecords = async (userRequest: Request, res: Response): Promise<v
             }
 
             // Verify Consent
-            const consent = await prisma.consent.findFirst({
-                where: {
-                    doctorId: userId,
-                    patientId: patientId,
-                    status: 'ACTIVE',
-                    validFrom: { lte: new Date() },
-                    validUntil: { gte: new Date() }
-                }
+            const now = new Date();
+            const consent = await Consent.findOne({
+                doctorId: userId,
+                patientId: patientId,
+                status: 'ACTIVE',
+                validFrom: { $lte: now },
+                validUntil: { $gte: now }
             });
 
             if (!consent) {
@@ -127,30 +113,24 @@ export const getRecords = async (userRequest: Request, res: Response): Promise<v
             whereCondition = { patientId: patientId };
 
             // Log Doctor Access
-            await prisma.auditLog.create({
-                data: {
-                    patientId: patientId,
-                    actorId: userId,
-                    action: "VIEW",
-                    resource: "RECORD_LIST",
-                    purpose: "ROUTINE_CARE",
-                    details: "Doctor viewed patient records"
-                }
+            await AuditLog.create({
+                patientId: patientId,
+                actorId: userId,
+                action: "VIEW",
+                resource: "RECORD_LIST",
+                purpose: "ROUTINE_CARE",
+                details: "Doctor viewed patient records"
             });
 
         } else {
-            // Fallback for other roles or unauthorized
             res.status(403).json({ error: 'Forbidden' });
             return;
         }
 
-        const records = await prisma.medicalRecord.findMany({
-            where: whereCondition,
-            orderBy: { createdAt: 'desc' }
-        });
+        const records = await MedicalRecord.find(whereCondition).sort({ createdAt: -1 });
 
         const recordsWithTrust = records.map((r: any) => ({
-            ...r,
+            ...r.toObject(), // Convert Mongoose doc to plain object
             trustIndicator: getTrustIndicator(r)
         }));
 

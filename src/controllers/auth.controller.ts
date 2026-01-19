@@ -1,9 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
+import User from '../models/User';
 
 // Helper to generate short patient code
 const generatePatientCode = () => {
@@ -18,28 +16,27 @@ const generateDoctorCode = () => {
 export const register = async (req: Request, res: Response) => {
     try {
         const { email, password, role } = req.body;
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const passwordHash = await bcrypt.hash(password, 10);
 
-        const patientCode = role === 'PATIENT' ? generatePatientCode() : null;
-        const doctorCode = role === 'DOCTOR' ? generateDoctorCode() : null;
+        const patientCode = role === 'PATIENT' ? generatePatientCode() : undefined;
+        const doctorCode = role === 'DOCTOR' ? generateDoctorCode() : undefined;
 
-        const user = await prisma.user.create({
-            data: {
-                email,
-                password_hash: hashedPassword,
-                role,
-                patientCode,
-                doctorCode
-            } as any, // Cast to any to bypass stale Prisma types
+        const user = await User.create({
+            email,
+            passwordHash,
+            role,
+            patientCode,
+            doctorCode
         });
 
         res.status(201).json({
             message: 'User created',
-            userId: user.id,
-            patientCode: (user as any).patientCode,
-            doctorCode: (user as any).doctorCode
+            userId: user._id, // Mongoose uses _id
+            patientCode: user.patientCode,
+            doctorCode: user.doctorCode
         });
     } catch (error) {
+        console.error("Registration error:", error);
         res.status(500).json({ error: 'Registration failed' });
     }
 };
@@ -47,27 +44,28 @@ export const register = async (req: Request, res: Response) => {
 export const login = async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body;
-        const user = await prisma.user.findUnique({ where: { email } });
+        const user = await User.findOne({ email });
 
-        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+        if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
             res.status(401).json({ error: 'Invalid credentials' });
             return;
         }
 
         const token = jwt.sign(
-            { userId: user.id, role: user.role },
+            { userId: user._id, role: user.role },
             process.env.JWT_SECRET as string,
             { expiresIn: '1h' }
         );
 
         res.json({
             token,
-            userId: user.id,
+            userId: user._id,
             role: user.role,
-            patientCode: (user as any).patientCode,
-            doctorCode: (user as any).doctorCode
+            patientCode: user.patientCode,
+            doctorCode: user.doctorCode
         });
     } catch (error) {
+        console.error("Login error:", error);
         res.status(500).json({ error: 'Login failed' });
     }
 };
