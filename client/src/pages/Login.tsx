@@ -19,6 +19,7 @@ const Login: React.FC = () => {
             // Save identifiers
             if (res.data.doctorCode) localStorage.setItem('doctorCode', res.data.doctorCode);
             if (res.data.patientCode) localStorage.setItem('patientCode', res.data.patientCode);
+            localStorage.setItem('hasSeenBasicsPrompt', String(res.data.hasSeenBasicsPrompt || false));
 
             const role = getUserRole();
             if (role === 'PATIENT') navigate('/dashboard');

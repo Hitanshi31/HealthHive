@@ -6,6 +6,9 @@ import authRoutes from './routes/auth.routes';
 import recordRoutes from './routes/record.routes';
 import consentRoutes from './routes/consent.routes';
 import emergencyRoutes from './routes/emergency.routes';
+import fhirRoutes from './routes/fhir.routes';
+import userRoutes from './routes/user.routes';
+import dependentRoutes from './routes/dependent.routes';
 
 dotenv.config();
 
@@ -20,6 +23,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/records', recordRoutes);
 app.use('/api/consent', consentRoutes);
 app.use('/api/emergency', emergencyRoutes);
+app.use('/api/fhir/v1', fhirRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/dependents', dependentRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date() });

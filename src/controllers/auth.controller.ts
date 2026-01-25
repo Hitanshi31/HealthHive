@@ -5,7 +5,7 @@ import User from '../models/User';
 
 // Helper to generate short patient code
 const generatePatientCode = () => {
-    return 'HH-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+    return 'HH-PAT-' + Math.random().toString(36).substring(2, 6).toUpperCase();
 };
 
 // Helper to generate short doctor code
@@ -62,7 +62,9 @@ export const login = async (req: Request, res: Response) => {
             userId: user._id,
             role: user.role,
             patientCode: user.patientCode,
-            doctorCode: user.doctorCode
+            doctorCode: user.doctorCode,
+            hasSeenBasicsPrompt: user.hasSeenBasicsPrompt,
+            healthBasics: user.healthBasics
         });
     } catch (error) {
         console.error("Login error:", error);

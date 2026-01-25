@@ -1,0 +1,53 @@
+
+--- USERS ---
+ID: 696e319054b60dee8501c216, Email: patient@test.com, Role: PATIENT, DocCode: N/A
+ID: 696e319154b60dee8501c219, Email: doctor@test.com, Role: DOCTOR, DocCode: DOC-80FVF
+ID: 696e325d54b60dee8501c22f, Email: patient1@gmail.com, Role: PATIENT, DocCode: N/A
+ID: 696f729727a716db1744709c, Email: doc1@gmail.com, Role: DOCTOR, DocCode: DOC-LN397
+ID: 6971d4e9b97d5ce160441675, Email: doc2@gmail.com, Role: DOCTOR, DocCode: DOC-H572X
+
+--- CONSENTS ---
+Consent ID: 696e319254b60dee8501c222
+  Patient: patient@test.com (696e319054b60dee8501c216)
+  Doctor: doctor@test.com (696e319154b60dee8501c219)
+  Status: ACTIVE
+  ValidUntil: Mon Jan 26 2026 18:58:50 GMT+0530 (India Standard Time) (Now: Thu Jan 22 2026 13:19:43 GMT+0530 (India Standard Time))
+  Is Active? true
+-----------------------------------
+Consent ID: 696f72b427a716db174470a2
+  Patient: doc1@gmail.com (696f729727a716db1744709c)
+  Doctor: doc1@gmail.com (696f729727a716db1744709c)
+  Status: ACTIVE
+  ValidUntil: Tue Jan 27 2026 17:49:00 GMT+0530 (India Standard Time) (Now: Thu Jan 22 2026 13:19:43 GMT+0530 (India Standard Time))
+  Is Active? true
+-----------------------------------
+Consent ID: 696f733927a716db174470e2
+  Patient: patient1@gmail.com (696e325d54b60dee8501c22f)
+  Doctor: doc1@gmail.com (696f729727a716db1744709c)
+  Status: REVOKED
+  ValidUntil: Tue Jan 27 2026 17:51:13 GMT+0530 (India Standard Time) (Now: Thu Jan 22 2026 13:19:43 GMT+0530 (India Standard Time))
+  Is Active? false
+-----------------------------------
+Consent ID: 6970ff825ac13f0c94e5e24a
+  Patient: doc1@gmail.com (696f729727a716db1744709c)
+  Doctor: doc1@gmail.com (696f729727a716db1744709c)
+  Status: ACTIVE
+  ValidUntil: Wed Jan 28 2026 22:02:02 GMT+0530 (India Standard Time) (Now: Thu Jan 22 2026 13:19:43 GMT+0530 (India Standard Time))
+  Is Active? true
+-----------------------------------
+Consent ID: 6971d4b7b97d5ce160441667
+  Patient: doc1@gmail.com (696f729727a716db1744709c)
+  Doctor: doc1@gmail.com (696f729727a716db1744709c)
+  Status: ACTIVE
+  ValidUntil: Thu Jan 29 2026 13:11:43 GMT+0530 (India Standard Time) (Now: Thu Jan 22 2026 13:19:43 GMT+0530 (India Standard Time))
+  Is Active? true
+-----------------------------------
+Consent ID: 6971d4f8b97d5ce16044167b
+  Patient: doc2@gmail.com (6971d4e9b97d5ce160441675)
+  Doctor: doc2@gmail.com (6971d4e9b97d5ce160441675)
+  Status: ACTIVE
+  ValidUntil: Thu Jan 29 2026 13:12:48 GMT+0530 (India Standard Time) (Now: Thu Jan 22 2026 13:19:43 GMT+0530 (India Standard Time))
+  Is Active? true
+-----------------------------------
+
+Test Query Result Count: 1

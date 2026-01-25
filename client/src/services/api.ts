@@ -15,6 +15,10 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+export const getDoctorPatients = async () => {
+    return api.get('/consent/doctor-patients');
+};
+
 export const saveToken = (token: string) => {
     localStorage.setItem('token', token);
 };

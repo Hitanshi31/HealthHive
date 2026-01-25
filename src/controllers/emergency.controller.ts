@@ -20,6 +20,7 @@ export const getEmergencyProfile = async (req: Request, res: Response) => {
         const response = {
             ...profile.toObject(),
             patientId: (profile.patientId as any)._id,
+            subjectProfileId: profile.subjectProfileId || null,
             patient: {
                 email: (profile.patientId as any).email
             }
@@ -50,6 +51,8 @@ export const generateQR = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
+        const { subjectProfileId } = req.body;
+
         // Generate a random token
         const qrToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
@@ -58,11 +61,18 @@ export const generateQR = async (req: Request, res: Response): Promise<void> => 
         expiresAt.setHours(expiresAt.getHours() + 24);
 
         // Update or Create the profile with the new token
+        // Key is (patientId + subjectProfileId)
+        const filter = {
+            patientId: user.userId,
+            subjectProfileId: subjectProfileId || null
+        };
+
         try {
             const profile = await EmergencyProfile.findOneAndUpdate(
-                { patientId: user.userId },
+                filter,
                 {
                     patientId: user.userId,
+                    subjectProfileId: subjectProfileId || null,
                     token: qrToken,
                     expiresAt,
                 },

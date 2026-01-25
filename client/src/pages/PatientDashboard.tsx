@@ -1,18 +1,42 @@
 import React, { useEffect, useState } from 'react';
-import api, { getUserId } from '../services/api';
+import api from '../services/api';
 import Navbar from '../components/Navbar';
-import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock } from 'lucide-react';
+import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock, Copy } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
+import HealthBasicsModal from '../components/HealthBasicsModal';
+import PatientTimeline from '../components/PatientTimeline';
+import ProfileSwitcher, { type Profile } from '../components/ProfileSwitcher';
+import AddFamilyMemberModal from '../components/AddFamilyMemberModal';
+import { listDependents } from '../services/dependentService';
 
 const PatientDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState('records');
+    const [activeTab, setActiveTab] = useState('timeline');
+    const [duration, setDuration] = useState('7d'); // Default 7 days
     const [records, setRecords] = useState<any[]>([]);
     const [consents, setConsents] = useState<any[]>([]);
     const [newDoctorId, setNewDoctorId] = useState('');
-    const [userId] = useState(getUserId());
     const [qrToken, setQrToken] = useState<string | null>(null);
     const [qrExpires, setQrExpires] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [showBasicsModal, setShowBasicsModal] = useState(false);
+
+    // Family Profile State
+    const [profiles, setProfiles] = useState<Profile[]>([{ id: null, name: 'Me', relationship: 'Primary' }]);
+    const [selectedProfile, setSelectedProfile] = useState<Profile>({ id: null, name: 'Me', relationship: 'Primary' });
+    const [showAddMember, setShowAddMember] = useState(false);
+
+    useEffect(() => {
+        // Check if user has seen basics prompt
+        const hasSeen = localStorage.getItem('hasSeenBasicsPrompt');
+        if (hasSeen === 'false') {
+            setShowBasicsModal(true);
+        }
+    }, []);
+
+    const handleBasicsSaved = () => {
+        setShowBasicsModal(false);
+        localStorage.setItem('hasSeenBasicsPrompt', 'true');
+    };
 
     useEffect(() => {
         if (activeTab === 'emergency' && !qrToken) {
@@ -22,7 +46,9 @@ const PatientDashboard: React.FC = () => {
 
     const generateEmergencyQR = async () => {
         try {
-            const res = await api.post('/emergency/generate');
+            const res = await api.post('/emergency/generate', {
+                subjectProfileId: selectedProfile.id
+            });
             setQrToken(res.data.qrToken);
             setQrExpires(res.data.expiresAt);
         } catch (e) {
@@ -31,13 +57,39 @@ const PatientDashboard: React.FC = () => {
     };
 
     useEffect(() => {
+        fetchProfiles();
+    }, []);
+
+    useEffect(() => {
         fetchRecords();
         fetchConsents();
-    }, []);
+        // Reset QR when switching profiles
+        setQrToken(null);
+        if (activeTab === 'emergency') {
+            generateEmergencyQR();
+        }
+    }, [selectedProfile]); // refetch when profile changes
+
+    const fetchProfiles = async () => {
+        try {
+            const deps = await listDependents();
+            const family: Profile[] = deps.map(d => ({
+                id: d.id,
+                name: d.name,
+                relationship: d.relationship
+            }));
+            setProfiles([{ id: null, name: 'Me', relationship: 'Primary' }, ...family]);
+        } catch (e) {
+            console.error("Failed to fetch dependents", e);
+        }
+    };
 
     const fetchRecords = async () => {
         try {
-            const res = await api.get('/records');
+            const params: any = {};
+            if (selectedProfile.id) params.subjectProfileId = selectedProfile.id;
+
+            const res = await api.get('/records', { params });
             setRecords(res.data);
         } catch (e) { console.error(e); }
     };
@@ -45,7 +97,13 @@ const PatientDashboard: React.FC = () => {
     const fetchConsents = async () => {
         try {
             const res = await api.get('/consent');
-            setConsents(res.data);
+            // Filter consents for the selected profile
+            // Backend returns all. Frontend filters for display.
+            const filtered = res.data.filter((c: any) => {
+                if (selectedProfile.id) return c.subjectProfileId === selectedProfile.id;
+                return !c.subjectProfileId; // Primary
+            });
+            setConsents(filtered);
         } catch (e) { console.error(e); }
     }
 
@@ -72,6 +130,11 @@ const PatientDashboard: React.FC = () => {
 
         setLoading(true);
         try {
+            // Append subjectProfileId if selected
+            if (selectedProfile.id) {
+                formData.append('subjectProfileId', selectedProfile.id);
+            }
+
             await api.post('/records', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
@@ -88,9 +151,18 @@ const PatientDashboard: React.FC = () => {
 
     const handleGrantConsent = async () => {
         try {
+            let expiry = new Date();
+            switch (duration) {
+                case '15m': expiry.setMinutes(expiry.getMinutes() + 15); break;
+                case '1h': expiry.setHours(expiry.getHours() + 1); break;
+                case '24h': expiry.setHours(expiry.getHours() + 24); break;
+                default: expiry.setDate(expiry.getDate() + 7);
+            }
+
             await api.post('/consent', {
                 doctorId: newDoctorId,
-                validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+                validUntil: expiry,
+                subjectProfileId: selectedProfile.id || undefined // Send ID or undefined
             });
             setNewDoctorId('');
             fetchConsents();
@@ -111,13 +183,52 @@ const PatientDashboard: React.FC = () => {
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all">
 
+                {/* Live Visit Mode Banner */}
+                {consents.some(c => c.status === 'ACTIVE') && (
+                    <div className="mb-6 bg-gradient-to-r from-green-600 to-teal-600 rounded-xl p-4 text-white shadow-lg animate-fade-in flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-white/20 p-2 rounded-full animate-pulse">
+                                <Activity size={24} />
+                            </div>
+                            <div>
+                                <h2 className="font-bold text-lg">Live Visit Mode Active</h2>
+                                <p className="text-green-50 text-sm">A doctor has active access to your data.</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setActiveTab('consent')}
+                            className="px-4 py-2 bg-white text-green-700 font-bold rounded-lg text-sm hover:bg-green-50 transition-colors"
+                        >
+                            Manage Access
+                        </button>
+                    </div>
+                )}
+
                 {/* Header Section */}
                 <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
                     <div>
-                        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">My Health Dashboard</h1>
+                        <div className="flex items-center gap-4 mb-2">
+                            <ProfileSwitcher
+                                currentProfile={selectedProfile}
+                                profiles={profiles}
+                                onSelectProfile={setSelectedProfile}
+                                onAddFamilyMember={() => setShowAddMember(true)}
+                            />
+                        </div>
+                        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                            {selectedProfile.id ? `${selectedProfile.name}'s Dashboard` : 'My Health Dashboard'}
+                        </h1>
                         <div className="flex items-center gap-3 mt-2">
                             <div className="px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-mono text-slate-500 flex items-center gap-2 shadow-sm">
-                                <span className="font-bold">ID:</span> {userId}
+                                <span className="font-bold">Code:</span>
+                                <span className="text-blue-600 font-bold">{localStorage.getItem('patientCode') || 'N/A'}</span>
+                                <button
+                                    onClick={() => navigator.clipboard.writeText(localStorage.getItem('patientCode') || '')}
+                                    className="ml-1 text-slate-400 hover:text-blue-600"
+                                    title="Copy Patient Code"
+                                >
+                                    <Copy size={12} />
+                                </button>
                             </div>
                             <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded-full border border-green-100">
                                 <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div> Active
@@ -126,7 +237,7 @@ const PatientDashboard: React.FC = () => {
                     </div>
 
                     <div className="flex bg-slate-200/50 p-1 rounded-xl">
-                        {['records', 'consent', 'emergency'].map((tab) => (
+                        {['records', 'timeline', 'consent', 'emergency'].map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -136,6 +247,7 @@ const PatientDashboard: React.FC = () => {
                                     }`}
                             >
                                 {tab === 'records' && <FileText size={18} />}
+                                {tab === 'timeline' && <Clock size={18} />}
                                 {tab === 'consent' && <Shield size={18} />}
                                 {tab === 'emergency' && <Activity size={18} />}
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -207,14 +319,49 @@ const PatientDashboard: React.FC = () => {
 
                                                     {/* AI Summary Box */}
                                                     <div className="mt-4 bg-blue-50/50 border-l-4 border-blue-500 rounded-r-lg p-3">
-                                                        <div className="flex items-center gap-1.5 mb-1.5">
-                                                            <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-widest">AI Summary</span>
+                                                        <div className="flex items-center justify-between mb-1.5">
+                                                            <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-widest">
+                                                                {r.showClinical ? 'Clinical Summary' : 'Patient Summary'}
+                                                            </span>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newRecords = [...records];
+                                                                    const idx = newRecords.findIndex(rec => rec._id === r._id || rec.id === r.id);
+                                                                    if (idx !== -1) {
+                                                                        newRecords[idx].showClinical = !newRecords[idx].showClinical;
+                                                                        setRecords(newRecords);
+                                                                    }
+                                                                }}
+                                                                className="text-[10px] text-blue-500 hover:text-blue-700 underline font-medium"
+                                                            >
+                                                                {r.showClinical ? 'Show Simple Explainer' : 'Show Clinical Details'}
+                                                            </button>
                                                         </div>
-                                                        <p className="text-sm text-slate-700 leading-relaxed">{r.summary}</p>
+                                                        {r.showClinical && r.aiStructuredSummary ? (
+                                                            <div className="space-y-3">
+                                                                <div className="grid grid-cols-1 gap-2">
+                                                                    {r.aiStructuredSummary.keyFindings?.map((f: any, i: number) => (
+                                                                        <div key={i} className="flex justify-between items-center text-xs border-b border-blue-100 pb-1">
+                                                                            <span className="font-semibold text-slate-600">{f.name}</span>
+                                                                            <span className="font-mono text-blue-700">{f.value}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                {r.aiDoctorNote && (
+                                                                    <p className="text-xs text-slate-600 italic border-t border-blue-200 pt-2 mt-2">
+                                                                        "{r.aiDoctorNote}"
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-sm text-slate-700 leading-relaxed">
+                                                                {(r.showClinical ? r.aiSummary : (r.aiPatientSummary || r.aiSummary)) || r.summary}
+                                                            </p>
+                                                        )}
                                                     </div>
                                                     <div className="mt-2 flex items-center gap-1 text-[10px] text-slate-400 italic">
                                                         <AlertTriangle size={10} />
-                                                        AI insights are for informational purposes only.
+                                                        AI-generated summary. Verify with original document.
                                                     </div>
                                                 </div>
                                             </div>
@@ -260,6 +407,21 @@ const PatientDashboard: React.FC = () => {
                         </div>
                     )}
 
+                    {activeTab === 'timeline' && (
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between max-w-3xl mx-auto">
+                                <h3 className="text-xl font-bold text-slate-800">Health Vault</h3>
+                                <button
+                                    onClick={() => alert("Connecting to Hospital Systems... (Feature coming soon)")}
+                                    className="text-sm font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2"
+                                >
+                                    <Plus size={16} /> Connect Hospital/Lab
+                                </button>
+                            </div>
+                            <PatientTimeline records={records} />
+                        </div>
+                    )}
+
                     {activeTab === 'consent' && (
                         <div className="max-w-4xl mx-auto space-y-8">
                             <div className="grid md:grid-cols-3 gap-8">
@@ -281,6 +443,24 @@ const PatientDashboard: React.FC = () => {
                                                     onChange={(e) => setNewDoctorId(e.target.value)}
                                                 />
                                             </div>
+                                            <div className="mb-4">
+                                                <label className="text-xs font-bold text-slate-700 uppercase mb-1 block">Duration</label>
+                                                <select
+                                                    value={duration}
+                                                    onChange={(e) => setDuration(e.target.value)}
+                                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition-all font-medium text-slate-700"
+                                                >
+                                                    <option value="15m">15 Minutes (Quick Consult)</option>
+                                                    <option value="1h">1 Hour (Standard Visit)</option>
+                                                    <option value="24h">24 Hours (Day Pass)</option>
+                                                    <option value="7d">7 Days (Follow-up)</option>
+                                                </select>
+                                                <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center gap-1">
+                                                    <Clock size={10} />
+                                                    Access automatically expires after this time.
+                                                </p>
+                                            </div>
+
                                             <button onClick={handleGrantConsent} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2">
                                                 <CheckCircle2 size={18} /> Grant Access
                                             </button>
@@ -389,6 +569,17 @@ const PatientDashboard: React.FC = () => {
 
                 </div>
             </main>
+
+            <HealthBasicsModal
+                isOpen={showBasicsModal}
+                onClose={() => handleBasicsSaved()} // Treat close as save/skip (skip handles itself)
+                onSaveSuccess={handleBasicsSaved}
+            />
+            <AddFamilyMemberModal
+                isOpen={showAddMember}
+                onClose={() => setShowAddMember(false)}
+                onSuccess={() => fetchProfiles()}
+            />
         </div>
     );
 };

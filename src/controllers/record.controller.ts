@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import MedicalRecord from '../models/MedicalRecord';
 import Consent from '../models/Consent';
 import AuditLog from '../models/AuditLog';
+import AIService from '../services/ai.service';
 
 // Helper to determine trust color
 const getTrustIndicator = (record: any) => {
@@ -17,7 +18,7 @@ const getUser = (req: Request) => (req as any).user;
 export const uploadRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const user = getUser(req);
-        const { type, summary, source, isComplete } = req.body;
+        const { type, summary, source, isComplete, subjectProfileId } = req.body;
         const file = req.file;
 
         // 1) NO DATA = NO RECORD
@@ -32,6 +33,7 @@ export const uploadRecord = async (req: Request, res: Response): Promise<void> =
         // 2) ZERO DEFAULTS POLICY
         const recordData: any = {
             patientId: user.userId,
+            subjectProfileId: subjectProfileId || null, // Handle Dependent ID or Primary (null)
             isComplete: isComplete === 'true' || isComplete === true,
             source: source || null,
             filePath: null
@@ -63,6 +65,12 @@ export const uploadRecord = async (req: Request, res: Response): Promise<void> =
         // 4) SINGLE INSERT GUARANTEE
         const record = await MedicalRecord.create(recordData);
 
+        // 5) TRIGGER AI SERVICE (Non-blocking / Background)
+        // We do NOT await this. It runs in the background.
+        AIService.processRecord(record.id).catch(err => {
+            console.error(`Failed to trigger AI for record ${record.id}:`, err);
+        });
+
         // Log Audit
         await AuditLog.create({
             patientId: user.userId,
@@ -86,31 +94,57 @@ export const getRecords = async (req: Request, res: Response): Promise<void> => 
         let whereCondition: any = {};
 
         if (role === 'PATIENT') {
-            whereCondition = { patientId: userId };
+            const subjectProfileId = req.query.subjectProfileId as string;
+            // Primary User (null/undefined) or Dependent (string)
+            if (subjectProfileId) {
+                whereCondition = { patientId: userId, subjectProfileId: subjectProfileId };
+            } else {
+                // Explicitly look for null or undefined (Primary Profile)
+                whereCondition = { patientId: userId, subjectProfileId: { $in: [null, undefined] } };
+            }
+
         } else if (role === 'DOCTOR') {
             const patientId = req.query.patientId as string;
+            const subjectProfileId = req.query.subjectProfileId as string; // Optional: specific dependent
 
             if (!patientId) {
                 res.status(400).json({ error: 'Patient ID is required' });
                 return;
             }
 
-            // Verify Consent
+            // Verify Consent - STRICT MATCHING
+            // If viewing dependent, must have consent for dependent.
+            // If viewing primary (no subjectProfileId), must have consent for primary (null).
             const now = new Date();
-            const consent = await Consent.findOne({
+            const consentQuery: any = {
                 doctorId: userId,
                 patientId: patientId,
                 status: 'ACTIVE',
                 validFrom: { $lte: now },
                 validUntil: { $gte: now }
-            });
+            };
+
+            if (subjectProfileId) {
+                consentQuery.subjectProfileId = subjectProfileId;
+            } else {
+                consentQuery.subjectProfileId = { $in: [null, undefined] };
+            }
+
+            const consent = await Consent.findOne(consentQuery);
 
             if (!consent) {
-                res.status(403).json({ error: 'Access denied: No active consent found' });
+                res.status(403).json({ error: 'Access denied: No active consent found for this profile' });
                 return;
             }
 
             whereCondition = { patientId: patientId };
+            if (subjectProfileId) {
+                whereCondition.subjectProfileId = subjectProfileId;
+            } else {
+                whereCondition.subjectProfileId = { $in: [null, undefined] };
+            }
+
+            // Log Doctor Access
 
             // Log Doctor Access
             await AuditLog.create({

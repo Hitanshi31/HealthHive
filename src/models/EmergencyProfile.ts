@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IEmergencyProfile extends Document {
     patientId: mongoose.Types.ObjectId;
+    subjectProfileId?: string;
     token: string;
     expiresAt: Date;
     bloodGroup: string;
@@ -11,7 +12,8 @@ export interface IEmergencyProfile extends Document {
 }
 
 const EmergencyProfileSchema: Schema = new Schema({
-    patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+    patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Removed unique: true
+    subjectProfileId: { type: String, required: false },
     token: { type: String, required: true, unique: true },
     expiresAt: { type: Date, required: true },
     bloodGroup: { type: String, default: 'Not Specified' },
