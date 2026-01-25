@@ -10,6 +10,10 @@ interface Record {
     trustIndicator: 'GREEN' | 'YELLOW' | 'RED';
     summary?: string;
     aiSummary?: string;
+    prescription?: {
+        medicines: any[];
+        doctorId: string;
+    };
 }
 
 interface PatientTimelineProps {
@@ -44,10 +48,35 @@ const PatientTimeline: React.FC<PatientTimelineProps> = ({ records }) => {
                         `}></div>
 
                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                                <span className={`text-xs font-bold px-2 py-0.5 rounded-md w-fit
-                                    ${r.type === 'LAB_REPORT' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}
-                                `}>
+                            {/* Record Summary/Content */}
+                            <div className="mb-3">
+                                {r.type === 'PRESCRIPTION' && r.prescription ? (
+                                    <div className="bg-blue-50/50 rounded-lg p-3 border border-blue-100">
+                                        <div className="flex flex-wrap gap-2 mb-2">
+                                            {r.prescription.medicines.map((med: any, i: number) => (
+                                                <span key={i} className="inline-flex flex-col bg-white border border-blue-200 px-3 py-1 rounded-md shadow-sm">
+                                                    <span className="font-bold text-slate-800 text-sm">{med.name}</span>
+                                                    <span className="text-[10px] text-slate-500">{med.dosage} • {med.frequency} • {med.duration}</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                        {r.source && (
+                                            <p className="text-xs text-blue-600 font-medium mt-1">Prescribed by: {r.source}</p>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="text-slate-600 text-sm leading-relaxed">
+                                        {r.summary || (r.aiSummary ? "AI Summary available" : "No details provided.")}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Tags / Metadata */}
+                            <div className="flex flex-wrap items-center gap-2 mb-4">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${r.type === 'PRESCRIPTION' ? 'bg-purple-100 text-purple-700' :
+                                    r.type === 'LAB_REPORT' ? 'bg-blue-100 text-blue-700' :
+                                        'bg-slate-100 text-slate-600'
+                                    }`}>
                                     {r.type.replace('_', ' ')}
                                 </span>
                                 <span className="text-xs text-slate-400 font-mono">

@@ -6,20 +6,25 @@ export interface IMedicalRecord extends Document {
     type: string;
     filePath?: string;
     source?: string;
-    summary?: string;
+    summary?: string; // Restored
     isComplete: boolean;
-    createdAt: Date;
-    updatedAt: Date;
+    trustIndicator?: 'GREEN' | 'YELLOW' | 'RED';
+
+    // AI Fields
     aiSummary?: string;
+    aiPatientSummary?: string;
+    aiDoctorNote?: string;
+    showClinical?: boolean;
     aiStructuredSummary?: {
         testName?: string;
         recordDate?: string;
         source?: string;
-        keyFindings?: { name: string; value: string }[];
+        keyFindings?: { name: string, value: string }[],
+        recommendations?: string[];
         clinicalNote?: string;
     };
-    aiPatientSummary?: string;
-    aiDoctorNote?: string;
+
+    // AI Context & flags (Restored)
     aiContext?: {
         freshnessLabel?: 'RECENT' | 'OLD' | 'OUTDATED';
         changeSummary?: string;
@@ -30,35 +35,60 @@ export interface IMedicalRecord extends Document {
         duplicateMedication?: boolean;
         relatedRecordIds?: mongoose.Types.ObjectId[];
     };
+
+    // Prescription Fields
+    prescription?: {
+        medicines: {
+            name: string;
+            dosage: string;
+            frequency: string;
+            duration: string;
+            startDate: Date;
+            instructions?: string;
+        }[];
+        doctorId: string; // User ID of the doctor
+        issuedAt: Date;
+    };
+
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 const MedicalRecordSchema: Schema = new Schema({
     patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    subjectProfileId: { type: String, required: false }, // null = Primary User, set = Dependent ID
-    type: { type: String, required: true },
+    subjectProfileId: { type: String, default: null }, // Dependent UUID or null
+    type: { type: String, required: true }, // ENUM validation handled by app logic or extended here if strict
+    summary: { type: String },
     filePath: { type: String },
     source: { type: String },
-    summary: { type: String },
-    isComplete: { type: Boolean, default: true },
-    aiSummary: { type: String }, // Fallback
-    aiStructuredSummary: { // New Structured Field
-        testName: String,
-        recordDate: String,
-        source: String,
+    isComplete: { type: Boolean, default: false },
+    trustIndicator: { type: String, enum: ['GREEN', 'YELLOW', 'RED'] },
+
+    // AI Fields
+    aiSummary: { type: String },
+    aiPatientSummary: { type: String },
+    aiDoctorNote: { type: String },
+    showClinical: { type: Boolean, default: false },
+    aiStructuredSummary: {
         keyFindings: [{ name: String, value: String }],
-        clinicalNote: String // kept for structure, but detailed note is below
-    },
-    aiPatientSummary: { type: String }, // Patient-friendly
-    aiDoctorNote: { type: String }, // Clinical, concise
-    aiContext: { // New field: Contextual AI data
-        freshnessLabel: { type: String, enum: ['RECENT', 'OLD', 'OUTDATED'] },
-        changeSummary: { type: String }
     },
     aiExtractedFields: { type: Map, of: mongoose.Schema.Types.Mixed }, // flexible JSON storage
     aiFlags: {
         duplicateTest: { type: Boolean, default: false },
         duplicateMedication: { type: Boolean, default: false },
         relatedRecordIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MedicalRecord' }]
+    },
+    prescription: {
+        medicines: [{
+            name: String,
+            dosage: String,
+            frequency: String,
+            duration: String,
+            startDate: Date,
+            instructions: String
+        }],
+        doctorId: String,
+        issuedAt: Date
     }
 }, {
     timestamps: true,

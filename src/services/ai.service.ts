@@ -40,7 +40,10 @@ export const processRecord = async (recordId: string): Promise<void> => {
         let aiOutput: AIOutput;
         const apiKey = process.env.GEMINI_API_KEY;
 
-        if (apiKey) {
+        if (record.type === 'PRESCRIPTION' && record.prescription) {
+            console.log("Generating deterministic summary for PRESCRIPTION.");
+            aiOutput = generatePrescriptionAnalysis(record);
+        } else if (apiKey) {
             aiOutput = await generateAIAnalysis(record, apiKey);
         } else {
             console.log("No GEMINI_API_KEY found. Using mock AI response.");
@@ -198,6 +201,30 @@ const generateAIAnalysis = async (record: IMedicalRecord, apiKey: string): Promi
         }
         return generateMockAnalysis(record); // Fallback to mock on error
     }
+};
+
+const generatePrescriptionAnalysis = (record: IMedicalRecord): AIOutput => {
+    const meds = record.prescription?.medicines || [];
+    const medList = meds.map(m => `- ${m.name} (${m.dosage}, ${m.frequency}) for ${m.duration}`).join('\n');
+
+    return {
+        summary: `Prescribed Medications:\n${medList}\n\n${DISCLAIMER}`,
+        patientSummary: `You have been prescribed the following medications:\n${medList}\nPlease follow the doctor's instructions.`,
+        structuredSummary: {
+            recordDate: record.createdAt ? new Date(record.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            source: 'Doctor Prescription',
+            keyFindings: meds.map(m => ({ name: 'Medication', value: `${m.name} ${m.dosage}` })),
+            clinicalNote: `Prescribed ${meds.length} medications.`
+        },
+        extractedFields: {
+            testDate: record.createdAt ? new Date(record.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            medications: meds.map(m => ({
+                name: m.name,
+                dosage: m.dosage,
+                duration: m.duration
+            }))
+        }
+    };
 };
 
 const generateMockAnalysis = (record: IMedicalRecord): AIOutput => {

@@ -29,11 +29,22 @@ export const register = async (req: Request, res: Response) => {
             doctorCode
         });
 
+        const token = jwt.sign(
+            { userId: user._id, role: user.role },
+            process.env.JWT_SECRET as string,
+            { expiresIn: '1h' }
+        );
+
         res.status(201).json({
             message: 'User created',
-            userId: user._id, // Mongoose uses _id
-            patientCode: user.patientCode,
-            doctorCode: user.doctorCode
+            token,
+            user: {
+                id: user._id,
+                email: user.email,
+                role: user.role,
+                patientCode: user.patientCode,
+                doctorCode: user.doctorCode
+            }
         });
     } catch (error) {
         console.error("Registration error:", error);

@@ -45,6 +45,7 @@ export const getDoctorPatients = async (req: AuthRequest, res: Response) => {
                 patientId: c.patientId._id,
                 email: c.patientId.email,
                 patientCode: c.patientId.patientCode,
+                subjectProfileId: c.subjectProfileId, // Critical for distinguishing dependents
                 validUntil: c.validUntil
             };
         }).filter(p => p !== null); // Filter out any nulls

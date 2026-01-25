@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
-import { FileText, AlertTriangle, Calendar, Activity, Lock, ArrowRight, ShieldCheck, CheckCircle2, Copy, Users, X, Clock } from 'lucide-react';
+import { FileText, AlertTriangle, Calendar, Activity, Lock, ArrowRight, ShieldCheck, CheckCircle2, Copy, Users, X, Clock, Pill } from 'lucide-react';
+import PrescriptionForm from '../components/PrescriptionForm';
+import OngoingMedicines from '../components/OngoingMedicines';
 
 const DoctorDashboard: React.FC = () => {
-    const [patientId, setPatientId] = useState('');
+    const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
     const [patients, setPatients] = useState<any[]>([]); // New state for active patients
     const [expiredPatients, setExpiredPatients] = useState<any[]>([]); // Expired sessions "ghost cards"
     const [records, setRecords] = useState<any[] | null>(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPrescribeModal, setShowPrescribeModal] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
 
 
     const fetchPatients = async () => {
@@ -19,17 +23,20 @@ const DoctorDashboard: React.FC = () => {
 
             setPatients((prevPatients) => {
                 // Calculate diff to find who just expired
-                const newIds = new Set(newPatients.map(p => p.patientId));
-                const newlyExpired = prevPatients.filter(p => !newIds.has(p.patientId));
+                // Key needs to include subjectProfileId
+                const getCompositeId = (p: any) => `${p.patientId}-${p.subjectProfileId || 'primary'}`;
+
+                const newIds = new Set(newPatients.map(getCompositeId));
+                const newlyExpired = prevPatients.filter(p => !newIds.has(getCompositeId(p)));
 
                 // Always run this to clean up re-active patients even if no one new expired
                 setExpiredPatients(prev => {
-                    const currentExpiredIds = new Set(prev.map(p => p.patientId));
+                    const currentExpiredIds = new Set(prev.map(getCompositeId));
                     // 1. Add newly expired unique ones
-                    const uniqueNew = newlyExpired.filter(p => !currentExpiredIds.has(p.patientId));
+                    const uniqueNew = newlyExpired.filter(p => !currentExpiredIds.has(getCompositeId(p)));
                     let updated = [...uniqueNew, ...prev];
                     // 2. Remove anyone who is now active again
-                    updated = updated.filter(p => !newIds.has(p.patientId));
+                    updated = updated.filter(p => !newIds.has(getCompositeId(p)));
                     return updated;
                 });
 
@@ -46,13 +53,16 @@ const DoctorDashboard: React.FC = () => {
         fetchPatients();
     });
 
-    const handlePatientSelect = async (pid: string) => {
-        setPatientId(pid);
+    const handlePatientSelect = async (patient: any) => {
+        setSelectedPatient(patient);
         setError('');
         setRecords(null);
         setLoading(true);
         try {
-            const res = await api.get(`/records?patientId=${pid}`);
+            const params: any = { patientId: patient.patientId };
+            if (patient.subjectProfileId) params.subjectProfileId = patient.subjectProfileId;
+
+            const res = await api.get(`/records`, { params });
             setRecords(res.data);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Access Denied or Not Found');
@@ -110,40 +120,45 @@ const DoctorDashboard: React.FC = () => {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {patients.map((p) => (
-                                <div
-                                    key={p.patientId}
-                                    onClick={() => handlePatientSelect(p.patientId)}
-                                    className={`bg-white p-6 rounded-xl border transition-all cursor-pointer relative overflow-hidden group
-                                        ${patientId === p.patientId
-                                            ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg scale-[1.02]'
-                                            : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
-                                        }`}
-                                >
-                                    <div className="flex items-center gap-4 mb-4">
-                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold
-                                            ${patientId === p.patientId ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600'}
-                                        `}>
-                                            {p.email[0].toUpperCase()}
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">{p.patientCode || 'Unknown ID'}</h4>
-                                            <p className="text-xs text-slate-500">{p.email}</p>
-                                        </div>
-                                    </div>
+                            {patients.map((p) => {
+                                const isSelected = selectedPatient?.patientId === p.patientId && selectedPatient?.subjectProfileId === p.subjectProfileId;
+                                const compositeKey = `${p.patientId}-${p.subjectProfileId || 'primary'}`;
 
-                                    <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wider">
-                                        <span className="text-green-600 bg-green-50 px-2 py-1 rounded border border-green-100 flex items-center gap-1">
-                                            <ShieldCheck size={10} /> Consented
-                                        </span>
-                                        {patientId === p.patientId && (
-                                            <span className="text-blue-600 flex items-center gap-1 animate-pulse">
-                                                Viewing <ArrowRight size={10} />
+                                return (
+                                    <div
+                                        key={compositeKey}
+                                        onClick={() => handlePatientSelect(p)}
+                                        className={`bg-white p-6 rounded-xl border transition-all cursor-pointer relative overflow-hidden group
+                                        ${isSelected
+                                                ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg scale-[1.02]'
+                                                : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-4 mb-4">
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold
+                                            ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600'}
+                                        `}>
+                                                {p.email[0].toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">{p.patientCode || 'Unknown ID'} {p.subjectProfileId ? '(Dependent)' : ''}</h4>
+                                                <p className="text-xs text-slate-500">{p.email}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wider">
+                                            <span className="text-green-600 bg-green-50 px-2 py-1 rounded border border-green-100 flex items-center gap-1">
+                                                <ShieldCheck size={10} /> Consented
                                             </span>
-                                        )}
+                                            {isSelected && (
+                                                <span className="text-blue-600 flex items-center gap-1 animate-pulse">
+                                                    Viewing <ArrowRight size={10} />
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                )
+                            })}
                         </div>
                     )}
 
@@ -224,6 +239,31 @@ const DoctorDashboard: React.FC = () => {
                                     <CheckCircle2 size={14} className="fill-green-500 text-white" /> Access Authorized
                                 </div>
                             </div>
+                            <div className="hidden md:block text-right">
+                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-50 border border-green-200 rounded-full text-green-700 text-xs font-bold uppercase tracking-wider">
+                                    <CheckCircle2 size={14} className="fill-green-500 text-white" /> Access Authorized
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Ongoing Medicines & Actions */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="md:col-span-2">
+                                <OngoingMedicines
+                                    targetPatientId={selectedPatient?.patientId}
+                                    subjectProfileId={selectedPatient?.subjectProfileId}
+                                    refreshTrigger={refreshKey}
+                                />
+                            </div>
+                            <div className="flex flex-col justify-start">
+                                <button
+                                    onClick={() => setShowPrescribeModal(true)}
+                                    className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all hover:scale-105"
+                                >
+                                    <Pill size={20} /> Write Prescription
+                                </button>
+                                <p className="text-xs text-slate-400 text-center mt-2">Checking interactions enabled</p>
+                            </div>
                         </div>
 
                         {/* AI Summary Banner */}
@@ -249,10 +289,10 @@ const DoctorDashboard: React.FC = () => {
 
                         {/* Timeline Grid */}
                         <div className="grid gap-6">
-                            {records.length === 0 && <p className="text-slate-500 italic text-center py-12">No records found for this patient.</p>}
+                            {records.filter(r => r.type !== 'PRESCRIPTION').length === 0 && <p className="text-slate-500 italic text-center py-12">No medical reports found for this patient.</p>}
 
-                            {records.map((r, i) => (
-                                <div key={r.id} className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col md:flex-row gap-6 relative">
+                            {records.filter(r => r.type !== 'PRESCRIPTION').map((r, i) => (
+                                <div key={r.id || r._id} className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col md:flex-row gap-6 relative">
                                     {/* Vertical Line for Timeline Effect (Optional visual) */}
                                     {i !== records.length - 1 && <div className="hidden md:block absolute left-9 top-16 bottom-[-24px] w-0.5 bg-slate-100"></div>}
 
@@ -343,6 +383,24 @@ const DoctorDashboard: React.FC = () => {
                     </div>
                 )}
             </main>
+
+            {/* Modal */}
+            {showPrescribeModal && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                    <div className="w-full max-w-2xl">
+                        <PrescriptionForm
+                            patientId={selectedPatient?.patientId}
+                            subjectProfileId={selectedPatient?.subjectProfileId} // Pass dependent ID if exists
+                            onSuccess={() => {
+                                setShowPrescribeModal(false);
+                                setRefreshKey(prev => prev + 1); // Trigger ongoing medicines refresh
+                                handlePatientSelect(selectedPatient); // Refresh timeline
+                            }}
+                            onCancel={() => setShowPrescribeModal(false)}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

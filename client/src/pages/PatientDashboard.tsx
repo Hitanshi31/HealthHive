@@ -5,6 +5,7 @@ import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, Cli
 import { QRCodeCanvas } from 'qrcode.react';
 import HealthBasicsModal from '../components/HealthBasicsModal';
 import PatientTimeline from '../components/PatientTimeline';
+import OngoingMedicines from '../components/OngoingMedicines';
 import ProfileSwitcher, { type Profile } from '../components/ProfileSwitcher';
 import AddFamilyMemberModal from '../components/AddFamilyMemberModal';
 import { listDependents } from '../services/dependentService';
@@ -258,7 +259,6 @@ const PatientDashboard: React.FC = () => {
 
                 {/* Tab Content */}
                 <div className="animate-fade-in">
-
                     {activeTab === 'records' && (
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                             {/* Main Records grid */}
@@ -268,11 +268,14 @@ const PatientDashboard: React.FC = () => {
                                         <ClipboardCheck className="text-blue-600" /> Recent Medical Records
                                     </h2>
                                     <div className="text-sm text-slate-500">
-                                        Showing {records.length} records
+                                        Showing {records.filter(r => r.type !== 'PRESCRIPTION').length} records
                                     </div>
                                 </div>
 
-                                {records.length === 0 && (
+                                {/* Ongoing Medicines Section (Visible on Records too) */}
+                                <OngoingMedicines subjectProfileId={selectedProfile.id} />
+
+                                {records.filter(r => r.type !== 'PRESCRIPTION').length === 0 && (
                                     <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200">
                                         <div className="bg-slate-50 p-4 rounded-full inline-block mb-4">
                                             <FileText className="text-slate-400" size={32} />
@@ -283,8 +286,8 @@ const PatientDashboard: React.FC = () => {
                                 )}
 
                                 <div className="grid grid-cols-1 gap-4">
-                                    {records.map(r => (
-                                        <div key={r.id} className="group bg-white rounded-xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-300 relative overflow-hidden">
+                                    {records.filter(r => r.type !== 'PRESCRIPTION').map(r => (
+                                        <div key={r.id || r._id} className="group bg-white rounded-xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-300 relative overflow-hidden">
                                             {/* Trust Badge Top Right */}
                                             <div className="absolute top-0 right-0 p-4">
                                                 <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border flex items-center gap-1.5
@@ -407,168 +410,174 @@ const PatientDashboard: React.FC = () => {
                         </div>
                     )}
 
-                    {activeTab === 'timeline' && (
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between max-w-3xl mx-auto">
-                                <h3 className="text-xl font-bold text-slate-800">Health Vault</h3>
-                                <button
-                                    onClick={() => alert("Connecting to Hospital Systems... (Feature coming soon)")}
-                                    className="text-sm font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2"
-                                >
-                                    <Plus size={16} /> Connect Hospital/Lab
-                                </button>
-                            </div>
-                            <PatientTimeline records={records} />
-                        </div>
-                    )}
-
-                    {activeTab === 'consent' && (
-                        <div className="max-w-4xl mx-auto space-y-8">
-                            <div className="grid md:grid-cols-3 gap-8">
-                                {/* Grant Form */}
-                                <div className="md:col-span-1">
-                                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full relative overflow-hidden">
-                                        <div className="absolute top-0 left-0 w-full h-1 bg-green-500"></div>
-                                        <h3 className="font-bold text-slate-900 text-lg mb-2">Grant Access</h3>
-                                        <p className="text-sm text-slate-500 mb-6">Allow a doctor to view your records for 7 days.</p>
-
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-700 uppercase mb-1 block">Doctor ID</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="e.g. DOC-123456"
-                                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition-all font-mono"
-                                                    value={newDoctorId}
-                                                    onChange={(e) => setNewDoctorId(e.target.value)}
-                                                />
-                                            </div>
-                                            <div className="mb-4">
-                                                <label className="text-xs font-bold text-slate-700 uppercase mb-1 block">Duration</label>
-                                                <select
-                                                    value={duration}
-                                                    onChange={(e) => setDuration(e.target.value)}
-                                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition-all font-medium text-slate-700"
-                                                >
-                                                    <option value="15m">15 Minutes (Quick Consult)</option>
-                                                    <option value="1h">1 Hour (Standard Visit)</option>
-                                                    <option value="24h">24 Hours (Day Pass)</option>
-                                                    <option value="7d">7 Days (Follow-up)</option>
-                                                </select>
-                                                <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center gap-1">
-                                                    <Clock size={10} />
-                                                    Access automatically expires after this time.
-                                                </p>
-                                            </div>
-
-                                            <button onClick={handleGrantConsent} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2">
-                                                <CheckCircle2 size={18} /> Grant Access
-                                            </button>
-                                        </div>
-                                    </div>
+                    {
+                        activeTab === 'timeline' && (
+                            <div className="space-y-6">
+                                <div className="flex items-center justify-between max-w-3xl mx-auto">
+                                    <h3 className="text-xl font-bold text-slate-800">Health Vault</h3>
+                                    <button
+                                        onClick={() => alert("Connecting to Hospital Systems... (Feature coming soon)")}
+                                        className="text-sm font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2"
+                                    >
+                                        <Plus size={16} /> Connect Hospital/Lab
+                                    </button>
                                 </div>
+                                <PatientTimeline records={records} />
+                            </div>
+                        )
+                    }
 
-                                {/* Active Consents List */}
-                                <div className="md:col-span-2 space-y-4">
-                                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                                        <h3 className="font-bold text-slate-800 text-lg">Active Permissions</h3>
-                                        <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{consents.filter(c => c.status === 'ACTIVE').length} Active</span>
-                                    </div>
+                    {
+                        activeTab === 'consent' && (
+                            <div className="max-w-4xl mx-auto space-y-8">
+                                <div className="grid md:grid-cols-3 gap-8">
+                                    {/* Grant Form */}
+                                    <div className="md:col-span-1">
+                                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-full h-1 bg-green-500"></div>
+                                            <h3 className="font-bold text-slate-900 text-lg mb-2">Grant Access</h3>
+                                            <p className="text-sm text-slate-500 mb-6">Allow a doctor to view your records for 7 days.</p>
 
-                                    {consents.length === 0 && (
-                                        <div className="flex flex-col items-center justify-center py-10 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                                            <Shield size={32} className="mb-2 opacity-50" />
-                                            <p>No doctors currently have access.</p>
-                                        </div>
-                                    )}
-
-                                    {consents.map(c => (
-                                        <div key={c.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center group hover:border-blue-200 transition-all">
-                                            <div className="flex items-center gap-4 w-full sm:w-auto">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${c.status === 'ACTIVE' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
-                                                    <Users size={20} />
-                                                </div>
+                                            <div className="space-y-4">
                                                 <div>
-                                                    <p className="font-bold text-slate-900">Doctor ID: {c.doctorId}</p>
-                                                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mt-1">
-                                                        {c.status === 'ACTIVE' ? (
-                                                            <span className="text-green-600">Expires: {new Date(c.validUntil).toLocaleDateString()}</span>
-                                                        ) : (
-                                                            <span className="text-slate-400">Expired / Revoked</span>
-                                                        )}
+                                                    <label className="text-xs font-bold text-slate-700 uppercase mb-1 block">Doctor ID</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g. DOC-123456"
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition-all font-mono"
+                                                        value={newDoctorId}
+                                                        onChange={(e) => setNewDoctorId(e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="mb-4">
+                                                    <label className="text-xs font-bold text-slate-700 uppercase mb-1 block">Duration</label>
+                                                    <select
+                                                        value={duration}
+                                                        onChange={(e) => setDuration(e.target.value)}
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none transition-all font-medium text-slate-700"
+                                                    >
+                                                        <option value="15m">15 Minutes (Quick Consult)</option>
+                                                        <option value="1h">1 Hour (Standard Visit)</option>
+                                                        <option value="24h">24 Hours (Day Pass)</option>
+                                                        <option value="7d">7 Days (Follow-up)</option>
+                                                    </select>
+                                                    <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center gap-1">
+                                                        <Clock size={10} />
+                                                        Access automatically expires after this time.
                                                     </p>
                                                 </div>
-                                            </div>
 
-                                            {c.status === 'ACTIVE' && (
-                                                <button
-                                                    onClick={() => handleRevoke(c.id)}
-                                                    className="mt-3 sm:mt-0 w-full sm:w-auto px-4 py-2 bg-white border border-red-200 text-red-600 text-sm font-bold rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
-                                                >
-                                                    <Trash2 size={14} /> Revoke
+                                                <button onClick={handleGrantConsent} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2">
+                                                    <CheckCircle2 size={18} /> Grant Access
                                                 </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Active Consents List */}
+                                    <div className="md:col-span-2 space-y-4">
+                                        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                                            <h3 className="font-bold text-slate-800 text-lg">Active Permissions</h3>
+                                            <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{consents.filter(c => c.status === 'ACTIVE').length} Active</span>
+                                        </div>
+
+                                        {consents.length === 0 && (
+                                            <div className="flex flex-col items-center justify-center py-10 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                                <Shield size={32} className="mb-2 opacity-50" />
+                                                <p>No doctors currently have access.</p>
+                                            </div>
+                                        )}
+
+                                        {consents.map(c => (
+                                            <div key={c.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center group hover:border-blue-200 transition-all">
+                                                <div className="flex items-center gap-4 w-full sm:w-auto">
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${c.status === 'ACTIVE' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                        <Users size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-slate-900">Doctor ID: {c.doctorId}</p>
+                                                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mt-1">
+                                                            {c.status === 'ACTIVE' ? (
+                                                                <span className="text-green-600">Expires: {new Date(c.validUntil).toLocaleDateString()}</span>
+                                                            ) : (
+                                                                <span className="text-slate-400">Expired / Revoked</span>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {c.status === 'ACTIVE' && (
+                                                    <button
+                                                        onClick={() => handleRevoke(c.id)}
+                                                        className="mt-3 sm:mt-0 w-full sm:w-auto px-4 py-2 bg-white border border-red-200 text-red-600 text-sm font-bold rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+                                                    >
+                                                        <Trash2 size={14} /> Revoke
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    }
+
+                    {
+                        activeTab === 'emergency' && (
+                            <div className="max-w-2xl mx-auto py-8">
+                                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
+                                    <div className="bg-red-600 p-8 text-center text-white">
+                                        <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
+                                            <Activity size={32} />
+                                        </div>
+                                        <h2 className="text-3xl font-bold tracking-tight">Emergency Access</h2>
+                                        <p className="text-red-100 mt-2 max-w-md mx-auto">
+                                            Use this QR code to provide paramedics with immediate, read-only access to your critical health data (Blood Type, Allergies).
+                                        </p>
+                                    </div>
+
+                                    <div className="p-10 flex flex-col items-center">
+                                        <div className="bg-white p-4 rounded-2xl shadow-inner border-4 border-slate-100 flex flex-col items-center">
+                                            {qrToken ? (
+                                                <>
+                                                    <QRCodeCanvas value={`${window.location.origin}/emergency/${qrToken}`} size={200} />
+                                                    {qrExpires && (
+                                                        <p className="text-[10px] text-red-500 font-bold mt-2 uppercase tracking-wide">
+                                                            Expires: {new Date(qrExpires).toLocaleTimeString()}
+                                                        </p>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="w-[200px] h-[200px] flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg">
+                                                    <QrIcon size={64} className="animate-pulse" />
+                                                </div>
                                             )}
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
-                    {activeTab === 'emergency' && (
-                        <div className="max-w-2xl mx-auto py-8">
-                            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
-                                <div className="bg-red-600 p-8 text-center text-white">
-                                    <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
-                                        <Activity size={32} />
-                                    </div>
-                                    <h2 className="text-3xl font-bold tracking-tight">Emergency Access</h2>
-                                    <p className="text-red-100 mt-2 max-w-md mx-auto">
-                                        Use this QR code to provide paramedics with immediate, read-only access to your critical health data (Blood Type, Allergies).
-                                    </p>
-                                </div>
-
-                                <div className="p-10 flex flex-col items-center">
-                                    <div className="bg-white p-4 rounded-2xl shadow-inner border-4 border-slate-100 flex flex-col items-center">
-                                        {qrToken ? (
-                                            <>
-                                                <QRCodeCanvas value={`${window.location.origin}/emergency/${qrToken}`} size={200} />
-                                                {qrExpires && (
-                                                    <p className="text-[10px] text-red-500 font-bold mt-2 uppercase tracking-wide">
-                                                        Expires: {new Date(qrExpires).toLocaleTimeString()}
-                                                    </p>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <div className="w-[200px] h-[200px] flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg">
-                                                <QrIcon size={64} className="animate-pulse" />
+                                        <div className="mt-8 text-center space-y-4 w-full">
+                                            <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                                <Shield size={12} /> Secure • Logged • Time-Limited
                                             </div>
-                                        )}
-                                    </div>
 
-                                    <div className="mt-8 text-center space-y-4 w-full">
-                                        <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                            <Shield size={12} /> Secure • Logged • Time-Limited
+                                            {qrToken && (
+                                                <a
+                                                    href={`${window.location.origin}/emergency/${qrToken}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="block w-full max-w-sm mx-auto py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 transform hover:scale-105"
+                                                >
+                                                    <ChevronRight size={18} /> Simulate Scan
+                                                </a>
+                                            )}
                                         </div>
-
-                                        {qrToken && (
-                                            <a
-                                                href={`${window.location.origin}/emergency/${qrToken}`}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="block w-full max-w-sm mx-auto py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 transform hover:scale-105"
-                                            >
-                                                <ChevronRight size={18} /> Simulate Scan
-                                            </a>
-                                        )}
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )
+                    }
 
-                </div>
-            </main>
+                </div >
+            </main >
 
             <HealthBasicsModal
                 isOpen={showBasicsModal}
@@ -580,7 +589,7 @@ const PatientDashboard: React.FC = () => {
                 onClose={() => setShowAddMember(false)}
                 onSuccess={() => fetchProfiles()}
             />
-        </div>
+        </div >
     );
 };
 
