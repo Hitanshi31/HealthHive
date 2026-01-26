@@ -12,6 +12,8 @@ const HealthBasicsModal: React.FC<HealthBasicsModalProps> = ({ isOpen, onClose, 
     const [allergies, setAllergies] = useState('');
     const [chronicConditions, setChronicConditions] = useState('');
     const [currentMedications, setMedications] = useState('');
+    const [bloodGroup, setBloodGroup] = useState('');
+    const [dob, setDob] = useState('');
     const [saving, setSaving] = useState(false);
 
     if (!isOpen) return null;
@@ -23,6 +25,8 @@ const HealthBasicsModal: React.FC<HealthBasicsModalProps> = ({ isOpen, onClose, 
                 allergies,
                 chronicConditions,
                 currentMedications,
+                bloodGroup,
+                dateOfBirth: dob,
                 skip: false
             });
             onSaveSuccess();
@@ -47,18 +51,47 @@ const HealthBasicsModal: React.FC<HealthBasicsModalProps> = ({ isOpen, onClose, 
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
                 <div className="bg-blue-600 p-6 text-white text-center">
                     <div className="mx-auto bg-white/20 w-12 h-12 rounded-full flex items-center justify-center mb-3">
                         <Shield size={24} />
                     </div>
-                    <h2 className="text-xl font-bold">Health Basics</h2>
+                    <h2 className="text-xl font-bold">Complete Your Profile</h2>
                     <p className="text-blue-100 text-sm mt-1">
-                        Adding this helps doctors in emergencies. You can skip this anytime.
+                        Critical info for emergencies.
                     </p>
                 </div>
 
                 <div className="p-6 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Blood Group</label>
+                            <select
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                value={bloodGroup}
+                                onChange={(e) => setBloodGroup(e.target.value)}
+                            >
+                                <option value="">Select</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Date of Birth</label>
+                            <input
+                                type="date"
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                value={dob}
+                                onChange={(e) => setDob(e.target.value)}
+                            />
+                        </div>
+                    </div>
                     <div>
                         <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Allergies (Optional)</label>
                         <input

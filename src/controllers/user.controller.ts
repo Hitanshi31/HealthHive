@@ -9,7 +9,7 @@ export const updateHealthBasics = async (req: AuthRequest, res: Response) => {
             return res.status(401).json({ error: "Unauthorized" });
         }
 
-        const { allergies, chronicConditions, currentMedications, skip } = req.body;
+        const { allergies, chronicConditions, currentMedications, bloodGroup, dateOfBirth, skip } = req.body;
 
         const updateData: any = {
             hasSeenBasicsPrompt: true
@@ -19,7 +19,9 @@ export const updateHealthBasics = async (req: AuthRequest, res: Response) => {
             updateData.healthBasics = {
                 allergies,
                 chronicConditions,
-                currentMedications
+                currentMedications,
+                bloodGroup,
+                dateOfBirth
             };
         }
 

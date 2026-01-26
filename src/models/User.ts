@@ -12,6 +12,8 @@ export interface IUser extends Document {
         allergies?: string;
         chronicConditions?: string;
         currentMedications?: string;
+        bloodGroup?: string;
+        dateOfBirth?: Date;
     };
     dependents?: {
         id: string;
@@ -38,7 +40,9 @@ const UserSchema: Schema = new Schema({
     healthBasics: {
         allergies: String,
         chronicConditions: String,
-        currentMedications: String
+        currentMedications: String,
+        bloodGroup: String,
+        dateOfBirth: Date
     },
     dependents: [{
         id: { type: String, required: true },

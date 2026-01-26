@@ -286,7 +286,22 @@ export const getOngoingMedicines = async (req: Request, res: Response): Promise<
         const activeMeds: any[] = [];
 
         prescriptions.forEach((p: any) => {
-            if (!p.prescription) return;
+            if (!p.prescription) {
+                // Handle file-only uploads (Unprocessed or Manual Files)
+                activeMeds.push({
+                    name: "Prescription File (Processing)",
+                    dosage: "View File",
+                    frequency: "Unknown",
+                    duration: "Unknown",
+                    startDate: p.createdAt,
+                    doctorId: p.source || "Uploaded",
+                    recordId: p._id,
+                    isFile: true, // Marker for frontend
+                    filePath: p.filePath
+                });
+                return;
+            }
+
             p.prescription.medicines.forEach((m: any) => {
                 const expiry = new Date(p.prescription!.issuedAt);
                 const durNum = parseInt(m.duration) || 7;

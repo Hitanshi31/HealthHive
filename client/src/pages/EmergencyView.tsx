@@ -1,162 +1,91 @@
+
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
-import { AlertTriangle, Clock, Activity, Heart, ShieldAlert, Droplets, Pill } from 'lucide-react';
+import api from '../services/api';
+import RiskAlerts from '../components/RiskAlerts';
+import CriticalSummaryCard from '../components/CriticalSummaryCard';
 
 const EmergencyView: React.FC = () => {
-    const { qrToken } = useParams();
-    const [data, setData] = useState<any>(null);
-    const [error, setError] = useState('');
+    const { token } = useParams<{ token: string }>();
+    const [snapshot, setSnapshot] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchSnapshot = async () => {
             try {
-                const res = await axios.get(`http://localhost:3000/api/emergency/${qrToken}`);
-                setData(res.data);
-            } catch (err) {
-                setError('Invalid or Expired Token');
+                // Use configured api instance
+                const res = await api.get(`/emergency/view/${token}`);
+                setSnapshot(res.data);
+            } catch (err: any) {
+                setError(err.response?.data?.message || 'Failed to load emergency data. Link may be expired.');
             } finally {
                 setLoading(false);
             }
         };
-        fetchData();
-    }, [qrToken]);
 
-    if (loading) return (
-        <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white">
-            <div className="flex flex-col items-center">
-                <div className="w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <p className="uppercase tracking-widest font-bold text-sm">Accessing Secured Network...</p>
-            </div>
-        </div>
-    );
+        if (token) fetchSnapshot();
+    }, [token]);
 
-    if (error) return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
-            <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200">
-                <AlertTriangle size={48} className="mx-auto mb-4 text-red-500" />
-                <h1 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h1>
-                <p className="text-slate-500">{error}</p>
-            </div>
-        </div>
-    );
+    if (loading) return <div className="p-10 text-center font-bold text-gray-500">Loading Critical Data...</div>;
+    if (error) return <div className="p-10 text-center font-bold text-red-600 border-2 border-red-600 rounded m-10 bg-red-50">{error}</div>;
+    if (!snapshot) return null;
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-red-200">
+        <div className="min-h-screen bg-gray-100">
+            {/* Disclaimer Bar */}
+            <div className="bg-red-600 text-white text-center py-2 font-bold uppercase tracking-wider text-sm sticky top-0 z-50">
+                ⚠️ Emergency Medical Snapshot (Read-Only) • Generated {new Date(snapshot.createdAt).toLocaleTimeString()}
+            </div>
 
-            {/* Emergency Header */}
-            <header className="bg-red-600 text-white shadow-lg sticky top-0 z-50">
-                <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-                            <ShieldAlert size={28} />
-                        </div>
-                        <div>
-                            <h1 className="text-lg font-bold uppercase tracking-wider leading-none">Emergency Profile</h1>
-                            <span className="text-[10px] opacity-80 font-mono">ID: {data.patientId.substring(0, 8).toUpperCase()}</span>
-                        </div>
-                    </div>
-                    <div className="hidden sm:flex items-center gap-2 bg-red-700 px-3 py-1 rounded-full text-xs font-bold border border-red-500 shadow-inner">
-                        <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                        LIVE READ-ONLY ACCESS
-                    </div>
-                </div>
-            </header>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-            <main className="max-w-4xl mx-auto p-6 space-y-6">
+                {/* 1. Risk Alerts */}
+                <RiskAlerts risks={snapshot.riskFlags} />
 
-                {/* Vital Stats Card */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="bg-slate-900 text-white p-6 flex justify-between items-center">
-                        <h2 className="font-bold flex items-center gap-2">
-                            <Activity size={20} className="text-red-500" /> Vital Statistics
-                        </h2>
-                        <div className="text-right">
-                            <p className="text-xs text-slate-400 uppercase tracking-wider">Patient Email</p>
-                            <p className="font-mono text-sm">{data.patient?.email}</p>
-                        </div>
-                    </div>
+                {/* 2. Critical Summary */}
+                <h3 className="text-xl font-bold text-gray-800 mb-4 uppercase tracking-wide">Vital Information</h3>
+                <CriticalSummaryCard summary={snapshot.criticalSummary} />
 
-                    <div className="p-8 grid grid-cols-2 md:grid-cols-4 gap-8">
-                        <div className="text-center">
-                            <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-1">Blood Type</p>
-                            <div className="inline-flex items-center justify-center w-16 h-16 bg-red-50 text-red-600 rounded-2xl font-black text-2xl border-2 border-red-100 shadow-sm relative overflow-hidden">
-                                <Droplets size={48} className="absolute opacity-10 -bottom-2 -right-2" />
-                                {data.bloodGroup || 'UNK'}
-                            </div>
+                {/* 3. Recent Reports & History */}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                    <h3 className="text-xl font-bold text-gray-800 mb-6 uppercase tracking-wide border-b pb-2">Recent Medical History</h3>
+
+                    {snapshot.recentReports && snapshot.recentReports.length > 0 ? (
+                        <div className="space-y-6">
+                            {snapshot.recentReports.map((report: any, idx: number) => (
+                                <div key={idx} className="border-l-4 border-blue-200 pl-4 py-1">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <h4 className="font-bold text-lg text-blue-900">{report.title}</h4>
+                                        <span className="text-sm text-gray-500">{new Date(report.date).toLocaleDateString()}</span>
+                                    </div>
+                                    <p className="text-gray-700">{report.summary}</p>
+
+                                    {/* AI Highlights if any */}
+                                    {report.criticalHighlights && report.criticalHighlights.length > 0 && (
+                                        <div className="mt-2 bg-yellow-50 p-2 rounded text-sm text-yellow-800 border border-yellow-200">
+                                            <strong>Key Findings:</strong>
+                                            <ul className="list-disc list-inside ml-2 mt-1">
+                                                {report.criticalHighlights.map((highlight: string, hIdx: number) => (
+                                                    <li key={hIdx}>{highlight}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                         </div>
-                        <div className="col-span-1 md:col-span-3 bg-slate-50 rounded-xl p-4 border border-slate-100 flex items-center text-sm text-slate-600">
-                            <p>
-                                <strong>NOTE:</strong> Ensure definitive blood typing before transfusion. This data is patient-provided.
-                            </p>
-                        </div>
-                    </div>
+                    ) : (
+                        <p className="text-gray-500 italic">No recent reports found in this snapshot.</p>
+                    )}
                 </div>
 
-                {/* Clinical Info Grid */}
-                <div className="grid md:grid-cols-2 gap-6">
-
-                    {/* Allergies */}
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-5">
-                            <AlertTriangle size={80} />
-                        </div>
-                        <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
-                                <AlertTriangle size={16} />
-                            </div>
-                            Known Allergies
-                        </h3>
-                        <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
-                            <p className="font-medium text-amber-900 text-lg">
-                                {data.allergies || 'No Known Allergies'}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Conditions */}
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-5">
-                            <Heart size={80} />
-                        </div>
-                        <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
-                                <Heart size={16} />
-                            </div>
-                            Chronic Conditions
-                        </h3>
-                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl">
-                            <p className="font-medium text-blue-900 text-lg">
-                                {data.chronicConditions || 'None Reported'}
-                            </p>
-                        </div>
-                    </div>
+                {/* Footer / Meta */}
+                <div className="mt-10 text-center text-gray-400 text-xs">
+                    <p>Snapshot ID: {snapshot._id}</p>
+                    <p>Expires: {new Date(snapshot.expiresAt).toLocaleString()}</p>
                 </div>
-
-                {/* Active Medications List */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
-                            <Pill size={16} />
-                        </div>
-                        Active Medications
-                    </h3>
-                    <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
-                        <p className="text-slate-700 font-mono text-sm leading-relaxed whitespace-pre-line">
-                            {data.activeMedications || 'No active medications listed.'}
-                        </p>
-                    </div>
-                </div>
-
-            </main>
-
-            <footer className="text-center p-8 text-slate-400 text-xs">
-                <p className="flex items-center justify-center gap-2 font-mono">
-                    <Clock size={12} />
-                    ACCESS LOGGED • EXPIRES {new Date(data.expiresAt).toLocaleTimeString()}
-                </p>
-            </footer>
+            </div>
         </div>
     );
 };

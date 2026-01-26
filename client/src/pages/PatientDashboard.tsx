@@ -50,7 +50,7 @@ const PatientDashboard: React.FC = () => {
             const res = await api.post('/emergency/generate', {
                 subjectProfileId: selectedProfile.id
             });
-            setQrToken(res.data.qrToken);
+            setQrToken(res.data.token);
             setQrExpires(res.data.expiresAt);
         } catch (e) {
             console.error("Failed to generate QR", e);
@@ -268,14 +268,14 @@ const PatientDashboard: React.FC = () => {
                                         <ClipboardCheck className="text-blue-600" /> Recent Medical Records
                                     </h2>
                                     <div className="text-sm text-slate-500">
-                                        Showing {records.filter(r => r.type !== 'PRESCRIPTION').length} records
+                                        Showing {records.filter(r => r.type?.toUpperCase() !== 'PRESCRIPTION').length} records
                                     </div>
                                 </div>
 
                                 {/* Ongoing Medicines Section (Visible on Records too) */}
                                 <OngoingMedicines subjectProfileId={selectedProfile.id} />
 
-                                {records.filter(r => r.type !== 'PRESCRIPTION').length === 0 && (
+                                {records.filter(r => r.type?.toUpperCase() !== 'PRESCRIPTION').length === 0 && (
                                     <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200">
                                         <div className="bg-slate-50 p-4 rounded-full inline-block mb-4">
                                             <FileText className="text-slate-400" size={32} />
@@ -286,7 +286,7 @@ const PatientDashboard: React.FC = () => {
                                 )}
 
                                 <div className="grid grid-cols-1 gap-4">
-                                    {records.filter(r => r.type !== 'PRESCRIPTION').map(r => (
+                                    {records.filter(r => r.type?.toUpperCase() !== 'PRESCRIPTION').map(r => (
                                         <div key={r.id || r._id} className="group bg-white rounded-xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-300 relative overflow-hidden">
                                             {/* Trust Badge Top Right */}
                                             <div className="absolute top-0 right-0 p-4">
@@ -422,7 +422,7 @@ const PatientDashboard: React.FC = () => {
                                         <Plus size={16} /> Connect Hospital/Lab
                                     </button>
                                 </div>
-                                <PatientTimeline records={records} />
+                                <PatientTimeline records={records.filter(r => r.type?.toUpperCase() !== 'PRESCRIPTION')} />
                             </div>
                         )
                     }
@@ -540,7 +540,7 @@ const PatientDashboard: React.FC = () => {
                                         <div className="bg-white p-4 rounded-2xl shadow-inner border-4 border-slate-100 flex flex-col items-center">
                                             {qrToken ? (
                                                 <>
-                                                    <QRCodeCanvas value={`${window.location.origin}/emergency/${qrToken}`} size={200} />
+                                                    <QRCodeCanvas value={`${window.location.origin}/emergency/view/${qrToken}`} size={200} />
                                                     {qrExpires && (
                                                         <p className="text-[10px] text-red-500 font-bold mt-2 uppercase tracking-wide">
                                                             Expires: {new Date(qrExpires).toLocaleTimeString()}
@@ -560,14 +560,30 @@ const PatientDashboard: React.FC = () => {
                                             </div>
 
                                             {qrToken && (
-                                                <a
-                                                    href={`${window.location.origin}/emergency/${qrToken}`}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="block w-full max-w-sm mx-auto py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 transform hover:scale-105"
-                                                >
-                                                    <ChevronRight size={18} /> Simulate Scan
-                                                </a>
+                                                <div className="w-full max-w-sm mx-auto space-y-3">
+                                                    <a
+                                                        href={`${window.location.origin}/emergency/view/${qrToken}`}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="block w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 transform hover:scale-105"
+                                                    >
+                                                        <ChevronRight size={18} /> Simulate Scan (Doctor View)
+                                                    </a>
+
+                                                    <button
+                                                        onClick={() => window.open(`${window.location.origin}/emergency/view/${qrToken}`, '_blank')}
+                                                        className="block w-full py-3 bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl transition-all"
+                                                    >
+                                                        Preview Snapshot
+                                                    </button>
+
+                                                    <button
+                                                        onClick={generateEmergencyQR}
+                                                        className="text-sm font-bold text-red-600 hover:text-red-700 underline block w-full text-center"
+                                                    >
+                                                        Regenerate New Token
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>

@@ -1,92 +1,29 @@
+
 import { Request, Response } from 'express';
-import EmergencyProfile from '../models/EmergencyProfile';
-import AuditLog from '../models/AuditLog';
+import { EmergencyService } from '../services/emergency.service';
 
-// Helper to safely access user from request
-const getUser = (req: Request) => (req as any).user;
-
-export const getEmergencyProfile = async (req: Request, res: Response) => {
-    const { qrToken } = req.params;
-
+export const generateEmergencyToken = async (req: Request, res: Response) => {
     try {
-        const profile = await EmergencyProfile.findOne({ token: qrToken })
-            .populate('patientId', 'email'); // Populate patient email
-
-        if (!profile || new Date() > profile.expiresAt) {
-            res.status(404).json({ error: 'Invalid or expired QR token' });
-            return;
-        }
-
-        const response = {
-            ...profile.toObject(),
-            patientId: (profile.patientId as any)._id,
-            subjectProfileId: profile.subjectProfileId || null,
-            patient: {
-                email: (profile.patientId as any).email
-            }
-        };
-
-        // Log Emergency Access
-        await AuditLog.create({
-            patientId: (profile.patientId as any)._id,
-            actorId: "System",
-            action: "VIEW",
-            resource: "EMERGENCY_PROFILE",
-            purpose: "EMERGENCY",
-            details: "Accessed via QR Code"
-        });
-
-        res.json(response);
-    } catch (error) {
-        console.error("Emergency access failed:", error);
-        res.status(500).json({ error: 'Access failed' });
+        const userId = (req as any).user.userId;
+        const result = await EmergencyService.generateSnapshot(userId);
+        res.json(result);
+    } catch (error: any) {
+        console.error('Error generating emergency token:', error);
+        res.status(500).json({ message: error.message });
     }
 };
 
-export const generateQR = async (req: Request, res: Response): Promise<void> => {
+export const viewEmergencySnapshot = async (req: Request, res: Response) => {
     try {
-        const user = getUser(req);
-        if (user.role !== 'PATIENT') {
-            res.status(403).json({ error: 'Only patients can generate emergency QR codes' });
-            return;
+        const { token } = req.params;
+        const snapshot = await EmergencyService.getSnapshot(token);
+        res.json(snapshot);
+    } catch (error: any) {
+        console.error('Error viewing emergency snapshot:', error);
+        if (error.message.includes('Invalid') || error.message.includes('expired')) {
+            res.status(403).json({ message: 'Access denied: ' + error.message });
+        } else {
+            res.status(500).json({ message: 'Internal Server Error' });
         }
-
-        const { subjectProfileId } = req.body;
-
-        // Generate a random token
-        const qrToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-
-        // Set expiration to 24 hours from now
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + 24);
-
-        // Update or Create the profile with the new token
-        // Key is (patientId + subjectProfileId)
-        const filter = {
-            patientId: user.userId,
-            subjectProfileId: subjectProfileId || null
-        };
-
-        try {
-            const profile = await EmergencyProfile.findOneAndUpdate(
-                filter,
-                {
-                    patientId: user.userId,
-                    subjectProfileId: subjectProfileId || null,
-                    token: qrToken,
-                    expiresAt,
-                },
-                { upsert: true, new: true, setDefaultsOnInsert: true }
-            );
-
-            res.status(201).json({ qrToken, expiresAt, message: "Emergency QR generated successfully" });
-        } catch (dbError: any) {
-            console.error("DB Error:", dbError);
-            res.status(500).json({ error: 'Failed to generate QR.' });
-        }
-
-    } catch (error) {
-        console.error("QR Generation Error:", error);
-        res.status(500).json({ error: 'Failed to generate QR code' });
     }
 };

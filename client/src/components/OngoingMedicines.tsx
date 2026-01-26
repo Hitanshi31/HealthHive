@@ -70,9 +70,20 @@ const OngoingMedicines: React.FC<OngoingMedicinesProps> = ({ subjectProfileId, t
                         <div className="flex justify-between items-start mb-2">
                             <div>
                                 <h4 className="font-bold text-slate-900">{med.name}</h4>
-                                <p className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md inline-block mt-1">
-                                    {med.dosage} • {med.frequency}
-                                </p>
+                                {(med as any).isFile ? (
+                                    <a
+                                        href={`http://localhost:5000/${(med as any).filePath}`} // Adjust if needed
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-xs font-bold text-blue-600 hover:underline mt-1 block"
+                                    >
+                                        View Document ↗
+                                    </a>
+                                ) : (
+                                    <p className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md inline-block mt-1">
+                                        {med.dosage} • {med.frequency}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -81,7 +92,7 @@ const OngoingMedicines: React.FC<OngoingMedicinesProps> = ({ subjectProfileId, t
                                 <Calendar size={10} /> Started: {new Date(med.startDate).toLocaleDateString()}
                             </span>
                             <span className="flex items-center gap-1">
-                                <User size={10} /> Doc ID: {med.doctorId?.substring(0, 8)}...
+                                <User size={10} /> {(med as any).isFile ? 'Source: Upload' : `Doc ID: ${med.doctorId?.substring(0, 8)}...`}
                             </span>
                         </div>
                     </div>

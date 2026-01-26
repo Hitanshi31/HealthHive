@@ -4,8 +4,8 @@ import path from 'path';
 import MedicalRecord, { IMedicalRecord } from '../models/MedicalRecord';
 import mongoose from 'mongoose';
 
-// Using gemini-1.5-flash for speed and efficiency
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
+// Using gemini-1.5-flash for speed and efficiency (Updated model name if needed, keeping reliable one)
+const GEMINI_MODEL = "gemini-2.0-flash-exp";
 
 interface AIOutput {
     summary: string;
@@ -26,6 +26,16 @@ interface AIOutput {
 }
 
 const DISCLAIMER = "AI insights are informational only and do not replace medical judgment.";
+
+const sanitizeText = (text: string): string => {
+    // Basic PII scrubbing (Mock implementation)
+    // In a real HIPAA-compliant system, this would use NLP to entities like Names, SSNs, etc.
+    // Here we use regex to mask patterns that look like Phone Numbers or Emails.
+    return text
+        .replace(/\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b/g, "[EMAIL_REDACTED]")
+        .replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "[PHONE_REDACTED]")
+        .replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN_REDACTED]");
+};
 
 export const processRecord = async (recordId: string): Promise<void> => {
     try {
@@ -65,6 +75,7 @@ export const processRecord = async (recordId: string): Promise<void> => {
         const flags = {
             duplicateTest: detectDuplicateTest(aiOutput, patientRecords),
             duplicateMedication: detectDuplicateMedication(aiOutput, patientRecords),
+            medicationOverlap: detectMedicationOverlap(aiOutput, patientRecords), // New Flag
             relatedRecordIds: findRelatedRecords(aiOutput, patientRecords)
         };
 
@@ -75,8 +86,8 @@ export const processRecord = async (recordId: string): Promise<void> => {
 
         // 3. Save updates
         record.aiSummary = aiOutput.summary;
-        record.aiPatientSummary = aiOutput.patientSummary;
-        record.aiDoctorNote = aiOutput.structuredSummary?.clinicalNote; // Map clinical note
+        record.aiPatientSummary = aiOutput.patientSummary; // Patient View
+        record.aiDoctorNote = aiOutput.structuredSummary?.clinicalNote; // Doctor View
         record.aiStructuredSummary = aiOutput.structuredSummary;
         record.aiContext = {
             freshnessLabel: freshness,
@@ -84,6 +95,9 @@ export const processRecord = async (recordId: string): Promise<void> => {
         };
         record.aiExtractedFields = aiOutput.extractedFields;
         record.aiFlags = flags;
+
+        // Force complete
+        record.isComplete = true;
 
         await record.save();
         console.log(`AI Processing completed successfully for record ${recordId}`);
@@ -115,43 +129,47 @@ const generateAIAnalysis = async (record: IMedicalRecord, apiKey: string): Promi
             };
         }
 
-        const inputText = `Record Type: ${record.type}\nDate: ${record.createdAt}\nContent/Notes: ${record.summary || "No specific summary provided."}`;
+        const rawText = `Record Type: ${record.type}\nDate: ${record.createdAt}\nContent/Notes: ${record.summary || "No specific summary provided."}`;
+        const sanitizedContext = sanitizeText(rawText);
 
         const prompt = `
-        You are a generic medical assistant AI. Your task is to analyze the attached medical record document and metadata to generate summaries.
+        You are a Responsible Medical AI Assistant for HealthHive.
         
-        METADATA:
-        ${inputText}
-
-        INSTRUCTIONS:
-        1. Analyze the ATTACHED DOCUMENT image/PDF to understand the medical details.
-        2. **SUMMARY GOAL (CLINICAL)**: Generate a STRUCTURED output suitable for a medical professional.
-           - **CRITICAL**: DO NOT mention Patient Name, Age, ID, or Date in the notes.
-           - Extract **Key Findings** as name-value pairs (e.g., "Hemoglobin": "12.5 g/dL").
-           - Write a **Clinical Note** that is concise, factual, and highlights abnormalities.
+        GOAL: Analyze medical records to provide safety flags and clinical summaries.
+        SAFETY: 
+        - DO NOT provision medical advice, diagnosis, or treatment plans.
+        - DO NOT mention patient names, IDs, or dates of birth (PHI).
+        - ALL outputs must be INFORMATIONAL ONLY.
         
-        3. **SUMMARY GOAL (PATIENT-FRIENDLY)**: Generate a separate simplified summary for the patient.
-           - Use simple language.
-           - Explain context and results broadly.
+        CONTEXT:
+        ${sanitizedContext}
 
-        4. Extract key structured data: test names, dates, key findings, and medications.
-        5. BE NEUTRAL and FACTUAL. DO NOT diagnose or recommend treatment.
-        6. Output JSON ONLY in the following format:
+        TASK:
+        1. **Analyze** the document/image.
+        2. **Generate Doctor Summary**:
+           - Tone: Clinical, concise, technical.
+           - Focus: Abnormalities, key metrics, clinical significance.
+        3. **Generate Patient Summary**:
+           - Tone: Simple, empathetic, clear (Grade 6 reading level).
+           - Focus: "What this means", "Next steps (generic)".
+        4. **Extract Structured Data**:
+           - Key Findings (Name/Value)
+           - Medications (Name, Dosage, Duration)
+           - Test Name, Date.
+
+        OUTPUT JSON FORMAT:
         {
-          "summary": "Full clinical summary text (fallback)",
-          "patientSummary": "Patient-friendly summary here...",
+          "summary": "Full summary (fallback)",
+          "patientSummary": "Simple explanation for the patient...",
           "structuredSummary": {
             "testName": "Exact test name",
             "recordDate": "YYYY-MM-DD",
             "source": "Lab/Hospital Name",
-            "keyFindings": [
-              { "name": "Finding Name", "value": "Value/Result" }
-            ],
-            "clinicalNote": "Concise clinical note text."
+            "keyFindings": [ { "name": "Finding Name", "value": "Value/Result" } ],
+            "clinicalNote": "Doctor-facing clinical note..."
           },
           "extractedFields": {
-            "testName": "Name of test if applicable",
-            "testDate": "YYYY-MM-DD",
+            "testName": "Name of test",
             "medications": [{ "name": "Drug Name", "dosage": "Dosage", "duration": "Duration" }]
           }
         }
@@ -189,7 +207,7 @@ const generateAIAnalysis = async (record: IMedicalRecord, apiKey: string): Promi
         return {
             summary: parsed.summary || "AI could not generate a summary.",
             patientSummary: parsed.patientSummary || "AI could not generate a patient summary.",
-            structuredSummary: parsed.structuredSummary, // New field
+            structuredSummary: parsed.structuredSummary,
             extractedFields: parsed.extractedFields || {}
         };
 
@@ -199,7 +217,7 @@ const generateAIAnalysis = async (record: IMedicalRecord, apiKey: string): Promi
         } else {
             console.error("Gemini API call failed:", error.message);
         }
-        return generateMockAnalysis(record); // Fallback to mock on error
+        return generateMockAnalysis(record);
     }
 };
 
@@ -293,6 +311,14 @@ const detectDuplicateMedication = (currentAI: AIOutput, history: IMedicalRecord[
 
         return prevMeds.some(pm => currentMedNames.has(pm.name?.toLowerCase()));
     });
+};
+
+const detectMedicationOverlap = (currentAI: AIOutput, history: IMedicalRecord[]): boolean => {
+    // Detect if same medication class or name exists in ACTIVE prescriptions (approximate)
+    // For now, extending duplicate logic to check simply "overlap" (if any meds exist in recent history)
+    // In real system: Check drug classes (e.g. 2 different NSAIDs).
+    // Here: Check if ANY med matches name.
+    return detectDuplicateMedication(currentAI, history);
 };
 
 const findRelatedRecords = (currentAI: AIOutput, history: IMedicalRecord[]): mongoose.Types.ObjectId[] => {

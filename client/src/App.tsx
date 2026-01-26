@@ -13,7 +13,7 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/dashboard" element={<PatientDashboard />} />
         <Route path="/doctor" element={<DoctorDashboard />} />
-        <Route path="/emergency/:qrToken" element={<EmergencyView />} />
+        <Route path="/emergency/view/:token" element={<EmergencyView />} />
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
     </Router>
