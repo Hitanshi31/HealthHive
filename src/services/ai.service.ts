@@ -2,6 +2,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import MedicalRecord, { IMedicalRecord } from '../models/MedicalRecord';
+import User from '../models/User';
 import mongoose from 'mongoose';
 
 // Using gemini-1.5-flash for speed and efficiency (Updated model name if needed, keeping reliable one)
@@ -78,6 +79,31 @@ export const processRecord = async (recordId: string): Promise<void> => {
             medicationOverlap: detectMedicationOverlap(aiOutput, patientRecords), // New Flag
             relatedRecordIds: findRelatedRecords(aiOutput, patientRecords)
         };
+
+        // New Logic: Update User's Ongoing Medications if medications were extracted
+        if (aiOutput.extractedFields?.medications && Array.isArray(aiOutput.extractedFields.medications)) {
+            const extractedMeds = aiOutput.extractedFields.medications;
+
+            // 1. Update User Profile (Health Basics)
+            await updateUserMedications(record.patientId.toString(), extractedMeds);
+
+            // 2. Populate record.prescription IF it's a PRESCRIPTION type and doesn't have one yet
+            // This ensures it shows up in the "Ongoing Medicines" timeline/list
+            if (record.type === 'PRESCRIPTION' && !record.prescription) {
+                record.prescription = {
+                    medicines: extractedMeds.map((m: any) => ({
+                        name: m.name || 'Unknown',
+                        dosage: m.dosage || 'As prescribed',
+                        frequency: m.frequency || 'As directed', // Prompt might not extract this yet
+                        duration: m.duration || 'Unknown',
+                        startDate: record.createdAt,
+                        instructions: 'Extracted from uploaded document'
+                    })),
+                    doctorId: 'AI_EXTRACTED', // Marker
+                    issuedAt: record.createdAt
+                };
+            }
+        }
 
         // New Local Logic: Freshness & Change Summary
         const freshness = calculateFreshness(record.createdAt);
@@ -332,6 +358,63 @@ const findRelatedRecords = (currentAI: AIOutput, history: IMedicalRecord[]): mon
         }
     });
     return relatedIds;
+};
+
+// Helper to update User's ongoing medications
+const updateUserMedications = async (userId: string, newMeds: any[]) => {
+    try {
+        const user = await User.findById(userId);
+        if (!user) return;
+
+        // healthBasics.currentMedications is a String (comma separated)
+        let currentMedsStr = user.healthBasics?.currentMedications || '';
+
+        // Split into array for easier checking
+        const existingMedsList = currentMedsStr.split(',').map(m => m.trim()).filter(Boolean);
+        const existingMedsSet = new Set(existingMedsList.map(m => m.toLowerCase()));
+
+        let addedCount = 0;
+
+        for (const med of newMeds) {
+            // Format: "Name Dosage (Duration)" e.g. "Amoxicillin 500mg (5 days)"
+            // If any field is missing, handle gracefully
+            const name = med.name || 'Unknown Drug';
+            const dosage = med.dosage || '';
+            const duration = med.duration ? `(${med.duration})` : '';
+
+            // Construct readable string
+            const medEntry = `${name} ${dosage} ${duration}`.replace(/\s+/g, ' ').trim();
+
+            // Prevent strict duplicates (case-insensitive check)
+            if (!existingMedsSet.has(medEntry.toLowerCase())) {
+                existingMedsList.push(medEntry);
+                existingMedsSet.add(medEntry.toLowerCase());
+                addedCount++;
+            }
+        }
+
+        if (addedCount > 0) {
+            if (!user.healthBasics) {
+                user.healthBasics = {
+                    allergies: '',
+                    chronicConditions: '',
+                    currentMedications: '',
+                    bloodGroup: '',
+                    dateOfBirth: undefined
+                };
+            }
+            user.healthBasics.currentMedications = existingMedsList.join(', ');
+
+            // Mongoose might not detect deep change in nested object if not reassigned or marked modified
+            // But assigning the leaf property usually works. To be safe with Mixed types or if it was just a string field:
+            // The schema says healthBasics is an object with typed fields, so strict mode works.
+
+            await user.save();
+            console.log(`Updated user ${userId} with ${addedCount} new medications from prescription.`);
+        }
+    } catch (error) {
+        console.error("Failed to update user medications:", error);
+    }
 };
 
 export default {

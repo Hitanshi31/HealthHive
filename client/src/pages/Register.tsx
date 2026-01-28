@@ -7,6 +7,7 @@ const Register: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState('PATIENT');
+    const [gender, setGender] = useState('Male');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
@@ -14,7 +15,7 @@ const Register: React.FC = () => {
         e.preventDefault();
         setLoading(true);
         try {
-            const res = await api.post('/auth/register', { email, password, role });
+            const res = await api.post('/auth/register', { email, password, role, gender });
             if (res.data.doctorCode) {
                 alert(`Registration successful! Your Doctor ID is: ${res.data.doctorCode}. Please login.`);
             } else {
@@ -58,6 +59,18 @@ const Register: React.FC = () => {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                             />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                            <select
+                                value={gender}
+                                onChange={(e) => setGender(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white"
+                            >
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                            </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">I am a...</label>

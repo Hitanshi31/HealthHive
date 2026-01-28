@@ -13,6 +13,7 @@ export interface Dependent {
     gender: 'Male' | 'Female' | 'Other';
     relationship: string;
     healthBasics: HealthBasics;
+    womensHealth?: any; // Using any for simplicity as it mirrors the User's inner structure
 }
 
 export const createDependent = async (dependent: Omit<Dependent, 'id'>) => {

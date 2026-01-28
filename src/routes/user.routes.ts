@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.middleware';
-import { updateHealthBasics, getHealthBasics } from '../controllers/user.controller';
+import { updateHealthBasics, getHealthBasics, updateWomensHealth } from '../controllers/user.controller';
 
 const router = express.Router();
 
@@ -11,5 +11,8 @@ router.put('/health-basics', updateHealthBasics);
 
 // GET /api/user/:id/health-basics
 router.get('/:id/health-basics', getHealthBasics);
+
+// PUT /api/user/womens-health
+router.put('/womens-health', updateWomensHealth);
 
 export default router;

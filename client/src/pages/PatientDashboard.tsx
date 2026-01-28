@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
-import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock, Copy } from 'lucide-react';
+import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock, Copy, Droplets } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import HealthBasicsModal from '../components/HealthBasicsModal';
 import PatientTimeline from '../components/PatientTimeline';
@@ -9,17 +9,32 @@ import OngoingMedicines from '../components/OngoingMedicines';
 import ProfileSwitcher, { type Profile } from '../components/ProfileSwitcher';
 import AddFamilyMemberModal from '../components/AddFamilyMemberModal';
 import { listDependents } from '../services/dependentService';
+import WomensHealthMemory from '../components/WomensHealthMemory';
 
 const PatientDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState('timeline');
-    const [duration, setDuration] = useState('7d'); // Default 7 days
+    const [activeTab, setActiveTab] = useState('records');
+    const [duration, setDuration] = useState('7d');
     const [records, setRecords] = useState<any[]>([]);
     const [consents, setConsents] = useState<any[]>([]);
+    const [dependents, setDependents] = useState<any[]>([]);
     const [newDoctorId, setNewDoctorId] = useState('');
     const [qrToken, setQrToken] = useState<string | null>(null);
     const [qrExpires, setQrExpires] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [showBasicsModal, setShowBasicsModal] = useState(false);
+
+    // Upload Flow State
+    const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const [showUploadModal, setShowUploadModal] = useState(false);
+
+    // New State for Women's Health
+    const [showWomensHealth, setShowWomensHealth] = useState(false);
+    const [userData, setUserData] = useState<any>(null);
+
+
+
+    // Refresh Triggers
+    const [medsRefreshTrigger, setMedsRefreshTrigger] = useState(0);
 
     // Family Profile State
     const [profiles, setProfiles] = useState<Profile[]>([{ id: null, name: 'Me', relationship: 'Primary' }]);
@@ -27,12 +42,22 @@ const PatientDashboard: React.FC = () => {
     const [showAddMember, setShowAddMember] = useState(false);
 
     useEffect(() => {
-        // Check if user has seen basics prompt
         const hasSeen = localStorage.getItem('hasSeenBasicsPrompt');
         if (hasSeen === 'false') {
             setShowBasicsModal(true);
         }
+        fetchProfiles();
+        fetchBasicUserData();
     }, []);
+
+    const fetchBasicUserData = async () => {
+        try {
+            // Fetch self to get women's health data status
+            const userId = JSON.parse(atob(localStorage.getItem('token')!.split('.')[1])).userId;
+            const res = await api.get(`/user/${userId}/health-basics`);
+            setUserData(res.data);
+        } catch (e) { console.error(e); }
+    };
 
     const handleBasicsSaved = () => {
         setShowBasicsModal(false);
@@ -58,18 +83,13 @@ const PatientDashboard: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchProfiles();
-    }, []);
-
-    useEffect(() => {
         fetchRecords();
         fetchConsents();
-        // Reset QR when switching profiles
         setQrToken(null);
         if (activeTab === 'emergency') {
             generateEmergencyQR();
         }
-    }, [selectedProfile]); // refetch when profile changes
+    }, [selectedProfile]);
 
     const fetchProfiles = async () => {
         try {
@@ -77,9 +97,17 @@ const PatientDashboard: React.FC = () => {
             const family: Profile[] = deps.map(d => ({
                 id: d.id,
                 name: d.name,
-                relationship: d.relationship
+                relationship: d.relationship,
+                gender: d.gender
             }));
-            setProfiles([{ id: null, name: 'Me', relationship: 'Primary' }, ...family]);
+            const meProfile: Profile = {
+                id: null,
+                name: 'Me',
+                relationship: 'Primary',
+                gender: userData?.gender
+            };
+            setProfiles([meProfile, ...family]);
+            setDependents(deps);
         } catch (e) {
             console.error("Failed to fetch dependents", e);
         }
@@ -98,8 +126,6 @@ const PatientDashboard: React.FC = () => {
     const fetchConsents = async () => {
         try {
             const res = await api.get('/consent');
-            // Filter consents for the selected profile
-            // Backend returns all. Frontend filters for display.
             const filtered = res.data.filter((c: any) => {
                 if (selectedProfile.id) return c.subjectProfileId === selectedProfile.id;
                 return !c.subjectProfileId; // Primary
@@ -114,24 +140,26 @@ const PatientDashboard: React.FC = () => {
         fileInputRef.current?.click();
     };
 
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
+        setUploadFile(e.target.files[0]);
+        setShowUploadModal(true);
+        // Reset input so same file can be selected again if cancelled
+        e.target.value = '';
+    };
 
-        const file = e.target.files[0];
+    const confirmUpload = async (type: string) => {
+        if (!uploadFile) return;
 
-        // Simple prompt for record type (since backend requires it)
-        const typeInput = window.prompt("Enter Record Type (e.g., LAB_REPORT, PRESCRIPTION, MRI):", "LAB_REPORT");
-        if (!typeInput) return; // Cancelled
+        setShowUploadModal(false);
+        setLoading(true);
 
         const formData = new FormData();
-        formData.append('file', file);
-        formData.append('type', typeInput.toUpperCase().replace(' ', '_'));
-        formData.append('isComplete', 'true');
-        // formData.append('summary', ''); // Let backend handle empty summary (will become null)
+        formData.append('file', uploadFile);
+        formData.append('type', type);
+        formData.append('isComplete', 'true'); // Treat as complete for now
 
-        setLoading(true);
         try {
-            // Append subjectProfileId if selected
             if (selectedProfile.id) {
                 formData.append('subjectProfileId', selectedProfile.id);
             }
@@ -140,13 +168,24 @@ const PatientDashboard: React.FC = () => {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             await fetchRecords();
+
+            if (type === 'PRESCRIPTION') {
+                setMedsRefreshTrigger(prev => prev + 1); // Trigger Refresh
+                // Determine whose profile we are on
+                if (selectedProfile.id === null) {
+                    fetchBasicUserData();
+                } else {
+                    // ...
+                }
+            }
+
             alert('Upload Successful!');
         } catch (error) {
             console.error(error);
             alert('Upload failed. Please try again.');
         } finally {
             setLoading(false);
-            if (fileInputRef.current) fileInputRef.current.value = ''; // Reset input
+            setUploadFile(null);
         }
     };
 
@@ -163,7 +202,7 @@ const PatientDashboard: React.FC = () => {
             await api.post('/consent', {
                 doctorId: newDoctorId,
                 validUntil: expiry,
-                subjectProfileId: selectedProfile.id || undefined // Send ID or undefined
+                subjectProfileId: selectedProfile.id || undefined
             });
             setNewDoctorId('');
             fetchConsents();
@@ -177,6 +216,37 @@ const PatientDashboard: React.FC = () => {
             fetchConsents();
         }
     };
+
+    const handleDeleteRecord = async (id: string) => {
+        if (confirm('Are you sure you want to delete this record? This cannot be undone.')) {
+            try {
+                await api.delete(`/records/${id}`);
+                setRecords(records.filter(r => (r.id || r._id) !== id));
+            } catch (e) {
+                console.error("Delete failed", e);
+                alert("Failed to delete record");
+            }
+        }
+    };
+
+    // Women's Health Override View
+    if (showWomensHealth) {
+        let passedData = userData;
+
+        if (selectedProfile.id) {
+            // Find dependent data
+            const dep = dependents.find(d => d.id === selectedProfile.id);
+            if (dep) {
+                // Construct synthetic userData object
+                passedData = {
+                    ...dep, // has womensHealth property from schema update
+                    subjectProfileId: dep.id // For API to identify target
+                };
+            }
+        }
+
+        return <WomensHealthMemory userData={passedData} onClose={() => setShowWomensHealth(false)} />;
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
@@ -249,7 +319,7 @@ const PatientDashboard: React.FC = () => {
                             >
                                 {tab === 'records' && <FileText size={18} />}
                                 {tab === 'timeline' && <Clock size={18} />}
-                                {tab === 'consent' && <Shield size={18} />}
+                                {tab === 'consent' && <Users size={18} />}
                                 {tab === 'emergency' && <Activity size={18} />}
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
                             </button>
@@ -265,17 +335,19 @@ const PatientDashboard: React.FC = () => {
                             <div className="lg:col-span-8 space-y-6">
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                        <ClipboardCheck className="text-blue-600" /> Recent Medical Records
+                                        <ClipboardCheck className="text-blue-600" /> Recent Medical Reports
                                     </h2>
                                     <div className="text-sm text-slate-500">
-                                        Showing {records.filter(r => r.type?.toUpperCase() !== 'PRESCRIPTION').length} records
+                                        Showing {records.filter(r => r.type !== 'PRESCRIPTION' && r.type !== 'INSURANCE').length} records
                                     </div>
                                 </div>
 
-                                {/* Ongoing Medicines Section (Visible on Records too) */}
-                                <OngoingMedicines subjectProfileId={selectedProfile.id} />
 
-                                {records.filter(r => r.type?.toUpperCase() !== 'PRESCRIPTION').length === 0 && (
+
+                                {/* Ongoing Medicines Section (Visible on main tab) */}
+                                <OngoingMedicines subjectProfileId={selectedProfile.id} refreshTrigger={medsRefreshTrigger} />
+
+                                {records.filter(r => r.type !== 'PRESCRIPTION' && r.type !== 'INSURANCE').length === 0 && (
                                     <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200">
                                         <div className="bg-slate-50 p-4 rounded-full inline-block mb-4">
                                             <FileText className="text-slate-400" size={32} />
@@ -286,7 +358,7 @@ const PatientDashboard: React.FC = () => {
                                 )}
 
                                 <div className="grid grid-cols-1 gap-4">
-                                    {records.filter(r => r.type?.toUpperCase() !== 'PRESCRIPTION').map(r => (
+                                    {records.filter(r => r.type !== 'PRESCRIPTION' && r.type !== 'INSURANCE').map(r => (
                                         <div key={r.id || r._id} className="group bg-white rounded-xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-300 relative overflow-hidden">
                                             {/* Trust Badge Top Right */}
                                             <div className="absolute top-0 right-0 p-4">
@@ -362,9 +434,18 @@ const PatientDashboard: React.FC = () => {
                                                             </p>
                                                         )}
                                                     </div>
-                                                    <div className="mt-2 flex items-center gap-1 text-[10px] text-slate-400 italic">
-                                                        <AlertTriangle size={10} />
-                                                        AI-generated summary. Verify with original document.
+                                                    <div className="mt-2 flex items-center justify-between">
+                                                        <div className="flex items-center gap-1 text-[10px] text-slate-400 italic">
+                                                            <AlertTriangle size={10} />
+                                                            AI-generated summary. Verify with original document.
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleDeleteRecord(r.id || r._id)}
+                                                            className="text-slate-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50"
+                                                            title="Delete Record"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -400,6 +481,35 @@ const PatientDashboard: React.FC = () => {
                                     <p className="text-xs text-center text-slate-400 mt-3">Supports PDF, JPG, PNG (Max 10MB)</p>
                                 </div>
 
+                                {/* NEW WOMEN'S HEALTH MODULE ENTRY POINT - DYNAMIC FOR PROFILE */}
+                                {(() => {
+                                    // Determine gender of selected profile
+                                    let currentGender = 'Other';
+                                    if (selectedProfile.id === null) {
+                                        currentGender = userData?.gender;
+                                    } else {
+                                        currentGender = selectedProfile.gender || 'Other';
+                                    }
+
+                                    if (currentGender === 'Female') {
+                                        return (
+                                            <div className="bg-gradient-to-br from-rose-50 to-pink-50 p-6 rounded-2xl border border-rose-100 relative overflow-hidden group hover:shadow-md transition-all cursor-pointer" onClick={() => setShowWomensHealth(true)}>
+                                                <div className="absolute top-0 right-0 p-4 opacity-50 group-hover:opacity-100 transition-opacity">
+                                                    <ChevronRight className="text-rose-400" />
+                                                </div>
+                                                <div className="bg-white p-3 rounded-full inline-block mb-3 shadow-sm text-rose-500">
+                                                    <Droplets size={24} />
+                                                </div>
+                                                <h4 className="font-bold text-rose-900 mb-1">Women's Health</h4>
+                                                <p className="text-sm text-rose-700 leading-relaxed">
+                                                    Track {selectedProfile.id ? `${selectedProfile.name}'s` : 'your'} cycle and pregnancy milestones.
+                                                </p>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
+
                                 <div className="bg-gradient-to-br from-indigo-50 to-blue-50 p-6 rounded-2xl border border-indigo-100">
                                     <h4 className="font-bold text-indigo-900 mb-2">Did you know?</h4>
                                     <p className="text-sm text-indigo-700 leading-relaxed">
@@ -407,8 +517,66 @@ const PatientDashboard: React.FC = () => {
                                     </p>
                                 </div>
                             </div>
+
+
+                            {/* INSURANCE SECTION (Moved "Downside") */}
+                            <div className="lg:col-span-12 mt-8 animate-fade-in order-last">
+                                <div className="flex items-center justify-between mb-4 border-t border-slate-200 pt-6">
+                                    <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
+                                        <Shield className="text-blue-600" /> Insurance Documents
+                                    </h2>
+                                    <div className="text-sm text-slate-500">
+                                        Showing {records.filter(r => r.type === 'INSURANCE').length} documents
+                                    </div>
+                                </div>
+
+                                {records.filter(r => r.type === 'INSURANCE').length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center p-8 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center">
+                                        <div className="bg-white p-3 rounded-full mb-3 shadow-sm">
+                                            <Shield className="text-slate-300" size={24} />
+                                        </div>
+                                        <p className="text-sm text-slate-500 font-medium">No insurance documents uploaded.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {records.filter(r => r.type === 'INSURANCE').map(r => (
+                                            <div key={r.id || r._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex items-center justify-between group">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="bg-green-100 text-green-600 p-2.5 rounded-lg">
+                                                        <Shield size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <a
+                                                            href={`http://localhost:3000/uploads/${r.filePath?.split(/[\\/]/).pop()}`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="font-bold text-slate-800 text-sm hover:text-blue-600 block"
+                                                        >
+                                                            Insurance Policy
+                                                        </a>
+                                                        <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                                            Uploaded: {new Date(r.createdAt).toLocaleDateString()}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleDeleteRecord(r.id || r._id)}
+                                                    className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                    title="Delete Document"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
+
+
+
+
 
                     {
                         activeTab === 'timeline' && (
@@ -422,7 +590,7 @@ const PatientDashboard: React.FC = () => {
                                         <Plus size={16} /> Connect Hospital/Lab
                                     </button>
                                 </div>
-                                <PatientTimeline records={records.filter(r => r.type?.toUpperCase() !== 'PRESCRIPTION')} />
+                                <PatientTimeline records={records.filter(r => r.type !== 'PRESCRIPTION' && r.type !== 'INSURANCE')} />
                             </div>
                         )
                     }
@@ -605,6 +773,66 @@ const PatientDashboard: React.FC = () => {
                 onClose={() => setShowAddMember(false)}
                 onSuccess={() => fetchProfiles()}
             />
+
+            {/* Upload Type Selection Modal */}
+            {
+                showUploadModal && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform scale-100 transition-all">
+                            <h3 className="text-lg font-bold text-slate-900 mb-2">Select Document Type</h3>
+                            <p className="text-sm text-slate-500 mb-6">Categorizing your file helps us organize it better.</p>
+
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => confirmUpload('LAB_REPORT')}
+                                    className="w-full p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all flex items-center gap-3 group text-left"
+                                >
+                                    <div className="bg-blue-100 text-blue-600 p-2 rounded-lg group-hover:bg-blue-200">
+                                        <FileText size={20} />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800">Medical Report</h4>
+                                        <p className="text-xs text-slate-500">Lab results, discharge summaries, etc.</p>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={() => confirmUpload('PRESCRIPTION')}
+                                    className="w-full p-4 rounded-xl border border-slate-200 hover:border-purple-500 hover:bg-purple-50 transition-all flex items-center gap-3 group text-left"
+                                >
+                                    <div className="bg-purple-100 text-purple-600 p-2 rounded-lg group-hover:bg-purple-200">
+                                        <ClipboardCheck size={20} />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800">Prescription</h4>
+                                        <p className="text-xs text-slate-500">Doctor's notes & medicines. Auto-updates meds.</p>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={() => confirmUpload('INSURANCE')}
+                                    className="w-full p-4 rounded-xl border border-slate-200 hover:border-green-500 hover:bg-green-50 transition-all flex items-center gap-3 group text-left"
+                                >
+                                    <div className="bg-green-100 text-green-600 p-2 rounded-lg group-hover:bg-green-200">
+                                        <Shield size={20} />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800">Insurance Policy</h4>
+                                        <p className="text-xs text-slate-500">Policy documents, ID cards, claims.</p>
+                                    </div>
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={() => { setShowUploadModal(false); setUploadFile(null); }}
+                                className="w-full mt-4 py-3 text-slate-400 font-bold hover:text-slate-600"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )
+            }
         </div >
     );
 };

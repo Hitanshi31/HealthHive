@@ -1,8 +1,11 @@
 import { Request, Response } from 'express';
 import MedicalRecord from '../models/MedicalRecord';
+import User from '../models/User';
 import Consent from '../models/Consent';
 import AuditLog from '../models/AuditLog';
 import AIService from '../services/ai.service';
+import path from 'path';
+import * as fs from 'fs';
 
 // Helper to determine trust color
 const getTrustIndicator = (record: any) => {
@@ -65,11 +68,18 @@ export const uploadRecord = async (req: Request, res: Response): Promise<void> =
         // 4) SINGLE INSERT GUARANTEE
         const record = await MedicalRecord.create(recordData);
 
-        // 5) TRIGGER AI SERVICE (Non-blocking / Background)
-        // We do NOT await this. It runs in the background.
-        AIService.processRecord(record.id).catch(err => {
-            console.error(`Failed to trigger AI for record ${record.id}:`, err);
-        });
+        // 5) TRIGGER AI SERVICE (Blocking for Prescriptions to ensure rapid UI update, Background for others)
+        if (record.type === 'PRESCRIPTION') {
+            try {
+                await AIService.processRecord(record.id);
+            } catch (err) {
+                console.error(`Failed to process prescription ${record.id}:`, err);
+            }
+        } else {
+            AIService.processRecord(record.id).catch(err => {
+                console.error(`Failed to trigger AI for record ${record.id}:`, err);
+            });
+        }
 
         // Log Audit
         await AuditLog.create({
@@ -284,17 +294,20 @@ export const getOngoingMedicines = async (req: Request, res: Response): Promise<
 
         const today = new Date();
         const activeMeds: any[] = [];
+        const pastMeds: any[] = [];
 
         prescriptions.forEach((p: any) => {
             if (!p.prescription) {
-                // Handle file-only uploads (Unprocessed or Manual Files)
+                // Determine status: "Processing" or "Processed (No structured data)"
+                const isProcessing = !(p.isComplete);
+
                 activeMeds.push({
-                    name: "Prescription File (Processing)",
-                    dosage: "View File",
+                    name: isProcessing ? "Prescription File (Processing)" : "Prescription Document",
+                    dosage: isProcessing ? "AI Analysis in Progress..." : "View Document",
                     frequency: "Unknown",
                     duration: "Unknown",
                     startDate: p.createdAt,
-                    doctorId: p.source || "Uploaded",
+                    doctorId: p.source || (isProcessing ? "System" : "Uploaded"),
                     recordId: p._id,
                     isFile: true, // Marker for frontend
                     filePath: p.filePath
@@ -315,14 +328,113 @@ export const getOngoingMedicines = async (req: Request, res: Response): Promise<
                         issuedAt: p.prescription!.issuedAt,
                         recordId: p._id
                     });
+                } else {
+                    pastMeds.push({
+                        ...m,
+                        doctorId: p.prescription!.doctorId,
+                        issuedAt: p.prescription!.issuedAt,
+                        recordId: p._id,
+                        expiryDate: expiry
+                    });
                 }
             });
         });
 
-        res.json(activeMeds);
+        // 4. Also fetch manually entered medications from User Profile
+        // This ensures that even if no prescription record exists (e.g. self-reported), it shows up.
+        // Also helps if AI updated the profile but record.prescription logic was skipped/failed.
+        const userProfile = await User.findById(patientId);
+        if (userProfile && userProfile.healthBasics && userProfile.healthBasics.currentMedications) {
+            const manualMeds = userProfile.healthBasics.currentMedications.split(',').map(s => s.trim()).filter(Boolean);
+            manualMeds.forEach(medStr => {
+                // Check if this string is already in activeMeds (approximate fuzzy match)
+                const alreadyExists = activeMeds.some(am =>
+                    medStr.toLowerCase().includes(am.name.toLowerCase()) ||
+                    am.name.toLowerCase().includes(medStr.toLowerCase())
+                );
+
+                if (!alreadyExists) {
+                    activeMeds.push({
+                        name: medStr, // Full string as name since it's unstructured
+                        dosage: 'Self-reported', // Marker
+                        frequency: 'As needed',
+                        duration: 'Ongoing',
+                        startDate: userProfile.createdAt || new Date(),
+                        doctorId: 'Self-reported',
+                        recordId: 'profile-' + Math.random().toString(36).substr(2, 9),
+                        isManual: true
+                    });
+                }
+            });
+        }
+
+        res.json({ active: activeMeds, past: pastMeds });
     } catch (error) {
         console.error('Error fetching ongoing medicines:', error);
         res.status(500).json({ error: 'Failed to fetch medicines' });
+    }
+};
+
+export const deleteRecord = async (req: Request, res: Response): Promise<void> => {
+    console.log(`[DELETE] Request received for ID: ${req.params.id}`);
+    try {
+        const user = getUser(req);
+        const { id } = req.params;
+        const userId = user.userId;
+        console.log(`[DELETE] User: ${userId}, Record ID: ${id}`);
+
+        const record = await MedicalRecord.findById(id);
+
+        if (!record) {
+            console.log(`[DELETE] Record not found`);
+            res.status(404).json({ error: 'Record not found' });
+            return;
+        }
+
+        // Only owner can delete
+        if (record.patientId.toString() !== user.userId.toString()) {
+            console.log(`[DELETE] Unauthorized access by user ${userId} for record owned by ${record.patientId}`);
+            res.status(403).json({ error: 'Unauthorized to delete this record' });
+            return;
+        }
+
+        console.log(`[DELETE] Record found. FilePath: ${record.filePath}`);
+
+        // 1. Delete File if exists
+        if (record.filePath) {
+            const fs = require('fs');
+            const fullPath = path.join(process.cwd(), record.filePath);
+            // Check if file exists before trying to unlink to avoid crashes
+            if (fs.existsSync(fullPath)) {
+                fs.unlinkSync(fullPath);
+                console.log(`[DELETE] File deleted: ${fullPath}`);
+            } else {
+                console.warn(`[DELETE] File not found on disk: ${fullPath}`);
+            }
+        }
+
+        // 2. Delete Record DB Entry
+        await MedicalRecord.deleteOne({ _id: id });
+        console.log(`[DELETE] Database entry deleted`);
+
+        // 3. Log Audit
+        try {
+            await AuditLog.create({
+                patientId: user.userId,
+                actorId: user.userId,
+                action: 'DELETE',
+                resource: 'RECORD',
+                purpose: 'User Action',
+                details: `Deleted record ${id}`
+            });
+        } catch (logInitError) {
+            console.error("[DELETE] Failed to create audit log", logInitError);
+        }
+
+        res.json({ message: 'Record deleted successfully' });
+    } catch (e) {
+        console.error('[DELETE] Error deleting record:', e);
+        res.status(500).json({ error: 'Delete failed' });
     }
 };
 
@@ -330,6 +442,7 @@ export default {
     uploadRecord,
     getRecords,
     createPrescription,
-    getOngoingMedicines
+    getOngoingMedicines,
+    deleteRecord
 };
 

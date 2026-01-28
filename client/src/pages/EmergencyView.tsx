@@ -47,6 +47,33 @@ const EmergencyView: React.FC = () => {
                 <h3 className="text-xl font-bold text-gray-800 mb-4 uppercase tracking-wide">Vital Information</h3>
                 <CriticalSummaryCard summary={snapshot.criticalSummary} />
 
+                {/* 2.5 Women's Health (Conditional) */}
+                {snapshot.womensHealth && (snapshot.womensHealth.isPregnant || (snapshot.womensHealth.conditions && snapshot.womensHealth.conditions.length > 0)) && (
+                    <div className="bg-pink-50 border-l-4 border-pink-500 p-4 mb-8 mt-6 rounded shadow-sm">
+                        <h3 className="text-lg font-bold text-pink-900 mb-2 flex items-center gap-2">
+                            ⚠️ Reproductive Health Alerts
+                        </h3>
+                        <div className="grid md:grid-cols-2 gap-4">
+                            {snapshot.womensHealth.isPregnant && (
+                                <div className="bg-white p-3 rounded border border-pink-200">
+                                    <span className="block text-xs font-bold text-pink-500 uppercase">Status</span>
+                                    <span className="font-bold text-pink-900 text-lg">PATIENT IS PREGNANT</span>
+                                </div>
+                            )}
+                            {snapshot.womensHealth.conditions && snapshot.womensHealth.conditions.length > 0 && (
+                                <div className="bg-white p-3 rounded border border-pink-200">
+                                    <span className="block text-xs font-bold text-pink-500 uppercase">Conditions</span>
+                                    <div className="flex flex-wrap gap-2 mt-1">
+                                        {snapshot.womensHealth.conditions.map((c: string) => (
+                                            <span key={c} className="bg-pink-100 text-pink-800 px-2 py-1 rounded text-sm font-bold">{c}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* 3. Recent Reports & History */}
                 <div className="bg-white rounded-lg shadow-md p-6">
                     <h3 className="text-xl font-bold text-gray-800 mb-6 uppercase tracking-wide border-b pb-2">Recent Medical History</h3>

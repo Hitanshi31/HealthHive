@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Shield } from 'lucide-react';
+import { Shield } from 'lucide-react';
 import api from '../services/api';
 
 interface HealthBasicsModalProps {

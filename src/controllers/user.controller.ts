@@ -50,7 +50,7 @@ export const getHealthBasics = async (req: AuthRequest, res: Response) => {
 
         // If requesting self
         if (requestingUser.userId === id) {
-            const user = await User.findById(id).select('healthBasics hasSeenBasicsPrompt');
+            const user = await User.findById(id).select('healthBasics hasSeenBasicsPrompt gender womensHealth');
             return res.json(user);
         }
 
@@ -82,5 +82,49 @@ export const getHealthBasics = async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error("Get Health Basics Error:", error);
         res.status(500).json({ error: "Error fetching basics" });
+    }
+};
+
+// Update Women's Health Data
+export const updateWomensHealth = async (req: AuthRequest, res: Response) => {
+    try {
+        if (!req.user || !req.user.userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const { isPregnant, pregnancyDetails, periodLog, conditions, privacy, subjectProfileId } = req.body;
+
+        // Construct the update object
+        const updateFields: any = {};
+        const prefix = subjectProfileId ? `dependents.$.womensHealth` : `womensHealth`;
+
+        if (isPregnant !== undefined) updateFields[`${prefix}.isPregnant`] = isPregnant;
+        // For sub-objects, we can merge or replace. Replacing is safer for simple arrays/objects to avoid sync issues.
+        if (pregnancyDetails) updateFields[`${prefix}.pregnancyDetails`] = pregnancyDetails;
+        if (periodLog) updateFields[`${prefix}.periodLog`] = periodLog;
+        if (conditions) updateFields[`${prefix}.conditions`] = conditions;
+        if (privacy) updateFields[`${prefix}.privacy`] = privacy;
+
+        let user;
+        if (subjectProfileId) {
+            // Update Dependent
+            user = await User.findOneAndUpdate(
+                { _id: req.user.userId, 'dependents.id': subjectProfileId },
+                { $set: updateFields },
+                { new: true }
+            );
+        } else {
+            // Update Primary User
+            user = await User.findByIdAndUpdate(
+                req.user.userId,
+                { $set: updateFields },
+                { new: true }
+            );
+        }
+
+        if (!user) return res.status(404).json({ error: "User or Dependent not found" });
+
+        res.json(user);
+    } catch (error) {
+        console.error("Women's Health Update Error:", error);
+        res.status(500).json({ error: "Failed to update" });
     }
 };

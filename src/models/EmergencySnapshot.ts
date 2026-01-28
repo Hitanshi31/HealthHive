@@ -36,7 +36,10 @@ export interface IEmergencySnapshot extends Document {
         temp?: number;
         recordedAt?: Date;
     };
-
+    womensHealth?: {
+        isPregnant: boolean;
+        conditions: string[];
+    };
     // Interoperability
     fhirBundle?: any; // Store generated FHIR Bundle for portability
 }
@@ -73,6 +76,11 @@ const EmergencySnapshotSchema: Schema = new Schema({
         heartRate: Number,
         temp: Number,
         recordedAt: Date
+    },
+
+    womensHealth: {
+        isPregnant: Boolean,
+        conditions: [String]
     },
 
     fhirBundle: { type: mongoose.Schema.Types.Mixed }

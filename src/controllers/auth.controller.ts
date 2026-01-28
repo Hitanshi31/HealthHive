@@ -15,7 +15,7 @@ const generateDoctorCode = () => {
 
 export const register = async (req: Request, res: Response) => {
     try {
-        const { email, password, role } = req.body;
+        const { email, password, role, gender } = req.body;
         const passwordHash = await bcrypt.hash(password, 10);
 
         const patientCode = role === 'PATIENT' ? generatePatientCode() : undefined;
@@ -25,6 +25,7 @@ export const register = async (req: Request, res: Response) => {
             email,
             passwordHash,
             role,
+            gender: gender || 'Other',
             patientCode,
             doctorCode
         });

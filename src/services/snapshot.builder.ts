@@ -17,6 +17,7 @@ export class SnapshotBuilder {
     private riskFlags: any[] = [];
     private recentReports: any[] = [];
     private vitals: any = {};
+    private womensHealth: any = undefined;
     private tokenHash: string | null = null;
     private expiresAt: Date | null = null;
 
@@ -37,6 +38,16 @@ export class SnapshotBuilder {
                 this.criticalSummary.currentMedications = user.healthBasics.currentMedications.split(',').map(s => s.trim()).filter(Boolean);
             }
         }
+
+        // Populate Women's Health if shared
+        if (user.gender === 'Female' && user.womensHealth && user.womensHealth.privacy?.shareWithEmergency) {
+            // Only include minimal critical data
+            this.womensHealth = {
+                isPregnant: user.womensHealth.isPregnant,
+                conditions: user.womensHealth.conditions || []
+            };
+        }
+
         return this;
     }
 
@@ -93,7 +104,8 @@ export class SnapshotBuilder {
             criticalSummary: this.criticalSummary,
             riskFlags: this.riskFlags,
             recentReports: this.recentReports,
-            vitals: this.vitals
+            vitals: this.vitals,
+            womensHealth: this.womensHealth
         };
 
         // Create temporary object to generate FHIR bundle

@@ -5,6 +5,7 @@ export type Profile = {
     id: string | null; // null for Primary (Me)
     name: string;
     relationship: string; // 'Me' or actual relationship
+    gender?: string;
 };
 
 interface ProfileSwitcherProps {

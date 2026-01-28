@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface Record {
     _id: string;
