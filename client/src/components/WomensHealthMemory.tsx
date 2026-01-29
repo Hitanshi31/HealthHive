@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Calendar, Baby, Lock, ChevronRight, Droplets, ArrowLeft, ShieldAlert } from 'lucide-react';
 import api from '../services/api';
 

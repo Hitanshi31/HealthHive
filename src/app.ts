@@ -9,6 +9,8 @@ import emergencyRoutes from './routes/emergency.routes';
 import fhirRoutes from './routes/fhir.routes';
 import userRoutes from './routes/user.routes';
 import dependentRoutes from './routes/dependent.routes';
+import vitalRoutes from './routes/vital.routes';
+import patientProfileRoutes from './routes/patientProfile.routes';
 
 dotenv.config();
 
@@ -26,6 +28,8 @@ app.use('/api/emergency', emergencyRoutes);
 app.use('/api/fhir/v1', fhirRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/dependents', dependentRoutes);
+app.use('/api/vitals', vitalRoutes);
+app.use('/api/profile', patientProfileRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date() });

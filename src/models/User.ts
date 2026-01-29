@@ -7,6 +7,14 @@ export interface IUser extends Document {
     gender?: 'Male' | 'Female' | 'Other';
     patientCode?: string;
     doctorCode?: string;
+
+    fullName?: string;
+    phoneNumber?: string;
+    organDonor?: boolean;
+    emergencyContact?: {
+        name: string;
+        phone: string;
+    };
     createdAt: Date;
     hasSeenBasicsPrompt?: boolean;
     healthBasics?: {
@@ -68,6 +76,14 @@ const UserSchema: Schema = new Schema({
     gender: { type: String, enum: ['Male', 'Female', 'Other'], default: 'Other' },
     patientCode: { type: String, unique: true, sparse: true },
     doctorCode: { type: String, unique: true, sparse: true },
+
+    fullName: String,
+    phoneNumber: String,
+    organDonor: { type: Boolean, default: false },
+    emergencyContact: {
+        name: String,
+        phone: String
+    },
     createdAt: { type: Date, default: Date.now },
     hasSeenBasicsPrompt: { type: Boolean, default: false },
     healthBasics: {

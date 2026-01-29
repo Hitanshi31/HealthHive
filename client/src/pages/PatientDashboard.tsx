@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
-import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock, Copy, Droplets } from 'lucide-react';
+import { Shield, FileText, Activity, Users, User, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock, Copy, Droplets } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import HealthBasicsModal from '../components/HealthBasicsModal';
 import PatientTimeline from '../components/PatientTimeline';
@@ -10,6 +10,8 @@ import ProfileSwitcher, { type Profile } from '../components/ProfileSwitcher';
 import AddFamilyMemberModal from '../components/AddFamilyMemberModal';
 import { listDependents } from '../services/dependentService';
 import WomensHealthMemory from '../components/WomensHealthMemory';
+import VitalsDashboard from '../components/VitalsDashboard';
+import ProfileDashboard from '../components/ProfileDashboard';
 
 const PatientDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState('records');
@@ -33,6 +35,8 @@ const PatientDashboard: React.FC = () => {
 
 
 
+    const [mainUserId, setMainUserId] = useState<string | null>(null);
+
     // Refresh Triggers
     const [medsRefreshTrigger, setMedsRefreshTrigger] = useState(0);
 
@@ -46,6 +50,16 @@ const PatientDashboard: React.FC = () => {
         if (hasSeen === 'false') {
             setShowBasicsModal(true);
         }
+
+        // Extract User ID
+        try {
+            const token = localStorage.getItem('token');
+            if (token) {
+                const uid = JSON.parse(atob(token.split('.')[1])).userId;
+                setMainUserId(uid);
+            }
+        } catch (e) { }
+
         fetchProfiles();
         fetchBasicUserData();
     }, []);
@@ -53,9 +67,17 @@ const PatientDashboard: React.FC = () => {
     const fetchBasicUserData = async () => {
         try {
             // Fetch self to get women's health data status
-            const userId = JSON.parse(atob(localStorage.getItem('token')!.split('.')[1])).userId;
-            const res = await api.get(`/user/${userId}/health-basics`);
-            setUserData(res.data);
+            if (!mainUserId) {
+                const token = localStorage.getItem('token');
+                if (token) {
+                    const userId = JSON.parse(atob(token.split('.')[1])).userId;
+                    const res = await api.get(`/user/${userId}/health-basics`);
+                    setUserData(res.data);
+                }
+            } else {
+                const res = await api.get(`/user/${mainUserId}/health-basics`);
+                setUserData(res.data);
+            }
         } catch (e) { console.error(e); }
     };
 
@@ -308,7 +330,7 @@ const PatientDashboard: React.FC = () => {
                     </div>
 
                     <div className="flex bg-slate-200/50 p-1 rounded-xl">
-                        {['records', 'timeline', 'consent', 'emergency'].map((tab) => (
+                        {['records', 'timeline', 'consent', 'emergency', 'vitals', 'profile'].map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -321,6 +343,8 @@ const PatientDashboard: React.FC = () => {
                                 {tab === 'timeline' && <Clock size={18} />}
                                 {tab === 'consent' && <Users size={18} />}
                                 {tab === 'emergency' && <Activity size={18} />}
+                                {tab === 'vitals' && <Activity size={18} />}
+                                {tab === 'profile' && <User size={18} />}
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
                             </button>
                         ))}
@@ -757,6 +781,18 @@ const PatientDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+                        )
+                    }
+
+                    {
+                        activeTab === 'vitals' && (
+                            <VitalsDashboard patientId={selectedProfile.id || null} />
+                        )
+                    }
+
+                    {
+                        activeTab === 'profile' && (
+                            <ProfileDashboard patientId={selectedProfile.id || mainUserId} />
                         )
                     }
 
