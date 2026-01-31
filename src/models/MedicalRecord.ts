@@ -11,6 +11,7 @@ export interface IMedicalRecord extends Document {
     trustIndicator?: 'GREEN' | 'YELLOW' | 'RED';
 
     // AI Fields
+    aiStatus?: 'PENDING' | 'COMPLETED' | 'FAILED'; // New Field
     aiSummary?: string;
     aiPatientSummary?: string;
     aiDoctorNote?: string;
@@ -20,7 +21,6 @@ export interface IMedicalRecord extends Document {
         recordDate?: string;
         source?: string;
         keyFindings?: { name: string, value: string }[],
-        recommendations?: string[];
         clinicalNote?: string;
     };
 
@@ -65,14 +65,23 @@ const MedicalRecordSchema: Schema = new Schema({
     trustIndicator: { type: String, enum: ['GREEN', 'YELLOW', 'RED'] },
 
     // AI Fields
+    aiStatus: { type: String, enum: ['PENDING', 'COMPLETED', 'FAILED'], default: 'PENDING' },
     aiSummary: { type: String },
     aiPatientSummary: { type: String },
     aiDoctorNote: { type: String },
     showClinical: { type: Boolean, default: false },
     aiStructuredSummary: {
+        testName: String,
+        recordDate: String,
+        source: String,
         keyFindings: [{ name: String, value: String }],
+        clinicalNote: String
     },
-    aiExtractedFields: { type: Map, of: mongoose.Schema.Types.Mixed }, // flexible JSON storage
+    aiContext: {
+        freshnessLabel: { type: String, enum: ['RECENT', 'OLD', 'OUTDATED'] },
+        changeSummary: String
+    },
+    aiExtractedFields: { type: mongoose.Schema.Types.Mixed }, // changed to Mixed from Map
     aiFlags: {
         duplicateTest: { type: Boolean, default: false },
         duplicateMedication: { type: Boolean, default: false },

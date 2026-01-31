@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
+import axios from 'axios';
 import Navbar from '../components/Navbar';
 import { Shield, FileText, Activity, Users, User, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock, Copy, Droplets } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -240,14 +241,36 @@ const PatientDashboard: React.FC = () => {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        if (confirm('Are you sure you want to delete this record? This cannot be undone.')) {
-            try {
-                await api.delete(`/records/${id}`);
-                setRecords(records.filter(r => (r.id || r._id) !== id));
-            } catch (e) {
-                console.error("Delete failed", e);
-                alert("Failed to delete record");
-            }
+        if (!confirm('Are you sure you want to delete this record?')) return;
+        try {
+            await axios.delete(`http://localhost:3000/api/records/${id}`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            fetchRecords();
+        } catch (error) {
+            console.error('Delete failed:', error);
+        }
+    };
+
+    const handleRetryAI = async (id: string) => {
+        try {
+            // Optimistic update
+            const newRecords = records.map(r =>
+                (r._id === id || r.id === id) ? { ...r, aiStatus: 'PENDING' } : r
+            );
+            setRecords(newRecords);
+
+            await axios.post(`http://localhost:3000/api/records/${id}/retry`, {}, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            // Don't need to refetch immediately, spinner will show. 
+            // Maybe poll or let user refresh/wait.
+            // For now, let's refetch after 2s to check if it was fast prescription
+            setTimeout(fetchRecords, 2000);
+        } catch (error) {
+            console.error('Retry failed:', error);
+            alert("Failed to start retry process. Please try again.");
+            fetchRecords(); // Revert state
         }
     };
 
@@ -417,45 +440,71 @@ const PatientDashboard: React.FC = () => {
                                                     </div>
 
                                                     {/* AI Summary Box */}
+                                                    {/* AI Summary Box */}
                                                     <div className="mt-4 bg-blue-50/50 border-l-4 border-blue-500 rounded-r-lg p-3">
                                                         <div className="flex items-center justify-between mb-1.5">
                                                             <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-widest">
                                                                 {r.showClinical ? 'Clinical Summary' : 'Patient Summary'}
                                                             </span>
-                                                            <button
-                                                                onClick={() => {
-                                                                    const newRecords = [...records];
-                                                                    const idx = newRecords.findIndex(rec => rec._id === r._id || rec.id === r.id);
-                                                                    if (idx !== -1) {
-                                                                        newRecords[idx].showClinical = !newRecords[idx].showClinical;
-                                                                        setRecords(newRecords);
-                                                                    }
-                                                                }}
-                                                                className="text-[10px] text-blue-500 hover:text-blue-700 underline font-medium"
-                                                            >
-                                                                {r.showClinical ? 'Show Simple Explainer' : 'Show Clinical Details'}
-                                                            </button>
+                                                            {r.aiStatus === 'COMPLETED' || (!r.aiStatus && r.aiSummary) ? (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const newRecords = [...records];
+                                                                        const idx = newRecords.findIndex(rec => rec._id === r._id || rec.id === r.id);
+                                                                        if (idx !== -1) {
+                                                                            newRecords[idx].showClinical = !newRecords[idx].showClinical;
+                                                                            setRecords(newRecords);
+                                                                        }
+                                                                    }}
+                                                                    className="text-[10px] text-blue-500 hover:text-blue-700 underline font-medium"
+                                                                >
+                                                                    {r.showClinical ? 'Show Simple Explainer' : 'Show Clinical Details'}
+                                                                </button>
+                                                            ) : null}
                                                         </div>
-                                                        {r.showClinical && r.aiStructuredSummary ? (
-                                                            <div className="space-y-3">
-                                                                <div className="grid grid-cols-1 gap-2">
-                                                                    {r.aiStructuredSummary.keyFindings?.map((f: any, i: number) => (
-                                                                        <div key={i} className="flex justify-between items-center text-xs border-b border-blue-100 pb-1">
-                                                                            <span className="font-semibold text-slate-600">{f.name}</span>
-                                                                            <span className="font-mono text-blue-700">{f.value}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                                {r.aiDoctorNote && (
-                                                                    <p className="text-xs text-slate-600 italic border-t border-blue-200 pt-2 mt-2">
-                                                                        "{r.aiDoctorNote}"
-                                                                    </p>
-                                                                )}
+
+                                                        {/* STATUS BASED RENDERING */}
+                                                        {(!r.aiStatus && !r.aiSummary) || r.aiStatus === 'PENDING' ? (
+                                                            <div className="flex items-center gap-3 py-2 text-slate-500">
+                                                                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                                                <span className="text-xs font-medium">AI is analyzing this document... (This may take a minute)</span>
+                                                            </div>
+                                                        ) : r.aiStatus === 'FAILED' ? (
+                                                            <div className="flex flex-col gap-2">
+                                                                <p className="text-xs text-red-500 font-medium flex items-center gap-1">
+                                                                    <AlertCircle size={12} /> Analysis Failed (Rate Limit or Network Error)
+                                                                </p>
+                                                                <button
+                                                                    onClick={() => handleRetryAI(r.id || r._id)}
+                                                                    className="self-start px-2 py-1 text-[10px] bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 transition-colors font-semibold"
+                                                                >
+                                                                    Retry Analysis
+                                                                </button>
                                                             </div>
                                                         ) : (
-                                                            <p className="text-sm text-slate-700 leading-relaxed">
-                                                                {(r.showClinical ? r.aiSummary : (r.aiPatientSummary || r.aiSummary)) || r.summary}
-                                                            </p>
+                                                            <>
+                                                                {r.showClinical && r.aiStructuredSummary ? (
+                                                                    <div className="space-y-3">
+                                                                        <div className="grid grid-cols-1 gap-2">
+                                                                            {r.aiStructuredSummary.keyFindings?.map((f: any, i: number) => (
+                                                                                <div key={i} className="flex justify-between items-center text-xs border-b border-blue-100 pb-1">
+                                                                                    <span className="font-semibold text-slate-600">{f.name}</span>
+                                                                                    <span className="font-mono text-blue-700">{f.value}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                        {r.aiDoctorNote && (
+                                                                            <p className="text-xs text-slate-600 italic border-t border-blue-200 pt-2 mt-2">
+                                                                                "{r.aiDoctorNote}"
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-sm text-slate-700 leading-relaxed">
+                                                                        {(r.showClinical ? r.aiSummary : (r.aiPatientSummary || r.aiSummary)) || r.summary}
+                                                                    </p>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </div>
                                                     <div className="mt-2 flex items-center justify-between">

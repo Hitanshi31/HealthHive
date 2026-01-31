@@ -3,7 +3,7 @@ import MedicalRecord from '../models/MedicalRecord';
 import User from '../models/User';
 import Consent from '../models/Consent';
 import AuditLog from '../models/AuditLog';
-import AIService from '../services/ai.service';
+import AIService, { processRecord } from '../services/ai.service';
 import path from 'path';
 import * as fs from 'fs';
 
@@ -73,11 +73,11 @@ export const uploadRecord = async (req: Request, res: Response): Promise<void> =
             try {
                 await AIService.processRecord(record.id);
             } catch (err) {
-                console.error(`Failed to process prescription ${record.id}:`, err);
+                console.error(`Failed to process prescription ${record.id}: `, err);
             }
         } else {
             AIService.processRecord(record.id).catch(err => {
-                console.error(`Failed to trigger AI for record ${record.id}:`, err);
+                console.error(`Failed to trigger AI for record ${record.id}: `, err);
             });
         }
 
@@ -376,12 +376,12 @@ export const getOngoingMedicines = async (req: Request, res: Response): Promise<
 };
 
 export const deleteRecord = async (req: Request, res: Response): Promise<void> => {
-    console.log(`[DELETE] Request received for ID: ${req.params.id}`);
+    console.log(`[DELETE] Request received for ID: ${req.params.id} `);
     try {
         const user = getUser(req);
         const { id } = req.params;
         const userId = user.userId;
-        console.log(`[DELETE] User: ${userId}, Record ID: ${id}`);
+        console.log(`[DELETE] User: ${userId}, Record ID: ${id} `);
 
         const record = await MedicalRecord.findById(id);
 
@@ -393,12 +393,12 @@ export const deleteRecord = async (req: Request, res: Response): Promise<void> =
 
         // Only owner can delete
         if (record.patientId.toString() !== user.userId.toString()) {
-            console.log(`[DELETE] Unauthorized access by user ${userId} for record owned by ${record.patientId}`);
+            console.log(`[DELETE] Unauthorized access by user ${userId} for record owned by ${record.patientId} `);
             res.status(403).json({ error: 'Unauthorized to delete this record' });
             return;
         }
 
-        console.log(`[DELETE] Record found. FilePath: ${record.filePath}`);
+        console.log(`[DELETE] Record found.FilePath: ${record.filePath} `);
 
         // 1. Delete File if exists
         if (record.filePath) {
@@ -407,9 +407,9 @@ export const deleteRecord = async (req: Request, res: Response): Promise<void> =
             // Check if file exists before trying to unlink to avoid crashes
             if (fs.existsSync(fullPath)) {
                 fs.unlinkSync(fullPath);
-                console.log(`[DELETE] File deleted: ${fullPath}`);
+                console.log(`[DELETE] File deleted: ${fullPath} `);
             } else {
-                console.warn(`[DELETE] File not found on disk: ${fullPath}`);
+                console.warn(`[DELETE] File not found on disk: ${fullPath} `);
             }
         }
 
@@ -425,7 +425,7 @@ export const deleteRecord = async (req: Request, res: Response): Promise<void> =
                 action: 'DELETE',
                 resource: 'RECORD',
                 purpose: 'User Action',
-                details: `Deleted record ${id}`
+                details: `Deleted record ${id} `
             });
         } catch (logInitError) {
             console.error("[DELETE] Failed to create audit log", logInitError);
@@ -438,11 +438,40 @@ export const deleteRecord = async (req: Request, res: Response): Promise<void> =
     }
 };
 
+
+export const retryAIProcessing = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const user = getUser(req);
+
+        // Ensure patient owns the record
+        const record = await MedicalRecord.findOne({ _id: id, patientId: user.userId });
+
+        if (!record) {
+            res.status(404).json({ message: 'Record not found' });
+            return;
+        }
+
+        // Reset to pending so frontend shows spinner immediately
+        record.aiStatus = 'PENDING';
+        await record.save();
+
+        // Trigger AI service
+        processRecord(id).catch(err => console.error("Retry background process failed", err));
+
+        res.status(200).json({ message: 'AI Processing execution started.', record });
+    } catch (error) {
+        console.error('Error retrying AI:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 export default {
     uploadRecord,
     getRecords,
     createPrescription,
     getOngoingMedicines,
-    deleteRecord
+    deleteRecord,
+    retryAIProcessing // Export new method
 };
 

@@ -6,7 +6,7 @@ import User from '../models/User';
 import mongoose from 'mongoose';
 
 // Using gemini-1.5-flash for speed and efficiency (Updated model name if needed, keeping reliable one)
-const GEMINI_MODEL = "gemini-2.0-flash-exp";
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 interface AIOutput {
     summary: string;
@@ -55,7 +55,16 @@ export const processRecord = async (recordId: string): Promise<void> => {
             console.log("Generating deterministic summary for PRESCRIPTION.");
             aiOutput = generatePrescriptionAnalysis(record);
         } else if (apiKey) {
-            aiOutput = await generateAIAnalysis(record, apiKey);
+            // Processing assumes PENDING state is already set by default or caller
+            try {
+                aiOutput = await generateAIAnalysis(record, apiKey);
+            } catch (err) {
+                console.error("AI Analysis Failed after retries.");
+                record.aiStatus = 'FAILED';
+                record.isComplete = true; // Mark mostly complete even if AI failed
+                await record.save();
+                return; // Exit, do not save mock data
+            }
         } else {
             console.log("No GEMINI_API_KEY found. Using mock AI response.");
             aiOutput = generateMockAnalysis(record);
@@ -111,6 +120,7 @@ export const processRecord = async (recordId: string): Promise<void> => {
 
 
         // 3. Save updates
+        record.aiStatus = 'COMPLETED'; // Success
         record.aiSummary = aiOutput.summary;
         record.aiPatientSummary = aiOutput.patientSummary; // Patient View
         record.aiDoctorNote = aiOutput.structuredSummary?.clinicalNote; // Doctor View
@@ -130,7 +140,18 @@ export const processRecord = async (recordId: string): Promise<void> => {
 
     } catch (error) {
         console.error(`AI Processing failed for record ${recordId}:`, error);
-        // Fail silently so as not to block the user flow
+        try {
+            // Attempt to mark as FAILED so user gets the Retry button
+            const record = await MedicalRecord.findById(recordId);
+            if (record) {
+                record.aiStatus = 'FAILED';
+                record.isComplete = true;
+                await record.save();
+                console.log(`Record ${recordId} marked as FAILED in DB.`);
+            }
+        } catch (dbError) {
+            console.error("Critical failure: Could not even mark record as FAILED", dbError);
+        }
     }
 };
 
@@ -206,13 +227,37 @@ const generateAIAnalysis = async (record: IMedicalRecord, apiKey: string): Promi
             parts.push(filePart);
         }
 
-        const response = await axios.post(url, {
-            contents: [{
-                parts: parts
-            }]
-        });
+        // Robust Retry Logic for 429 Errors (Free Tier Handling)
+        let response;
+        let attempts = 0;
+        const maxAttempts = 10; // Increased from 3 to 10 to handle 60s+ queues
 
-        const candidates = response.data?.candidates;
+        while (attempts < maxAttempts) {
+            try {
+                response = await axios.post(url, {
+                    contents: [{
+                        parts: parts
+                    }]
+                });
+                break; // Success
+            } catch (err: any) {
+                attempts++;
+                // Check for 429 OR 503 (Service Unavailable)
+                if ((err.response?.status === 429 || err.response?.status === 503) && attempts < maxAttempts) {
+                    // Exponential backoff: 2s, 4s, 8s, 16s, 32s, 64s... 
+                    // Cap at 60s to be reasonable
+                    let waitTime = Math.pow(2, attempts) * 1000;
+                    if (waitTime > 60000) waitTime = 60000;
+
+                    console.log(`Gemini Busy/RateLimit (${err.response.status}). Attempt ${attempts}/${maxAttempts}. Retrying in ${waitTime / 1000}s...`);
+                    await new Promise(res => setTimeout(res, waitTime));
+                } else {
+                    throw err; // Re-throw if not a transient error or max attempts reached
+                }
+            }
+        }
+
+        const candidates = response?.data?.candidates;
         if (!candidates || candidates.length === 0) {
             throw new Error("No response from Gemini");
         }
@@ -243,7 +288,7 @@ const generateAIAnalysis = async (record: IMedicalRecord, apiKey: string): Promi
         } else {
             console.error("Gemini API call failed:", error.message);
         }
-        return generateMockAnalysis(record);
+        throw error; // Propagate error to main handler to set FAILED status
     }
 };
 
