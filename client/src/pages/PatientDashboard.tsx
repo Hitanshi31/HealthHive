@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import axios from 'axios';
 import Navbar from '../components/Navbar';
-import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock, Copy } from 'lucide-react';
+import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import HealthBasicsModal from '../components/HealthBasicsModal';
 import PatientTimeline from '../components/PatientTimeline';
 import OngoingMedicines from '../components/OngoingMedicines';
-import ProfileSwitcher, { type Profile } from '../components/ProfileSwitcher';
+import { type Profile } from '../components/ProfileSwitcher';
 import AddFamilyMemberModal from '../components/AddFamilyMemberModal';
 import { listDependents } from '../services/dependentService';
 import WomensHealthMemory from '../components/WomensHealthMemory';
@@ -15,9 +15,18 @@ import VitalsDashboard from '../components/VitalsDashboard';
 import ProfileDashboard from '../components/ProfileDashboard';
 import DashboardSidebar from '../components/DashboardSidebar';
 
+import { useNavigate, useSearchParams } from 'react-router-dom';
+
 const PatientDashboard: React.FC = () => {
-    // Default to 'records' as the main view
-    const [activeTab, setActiveTab] = useState('records');
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    // Default to 'records' as the main view, or use param
+    const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'records');
+
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab) setActiveTab(tab);
+    }, [searchParams]);
     const [duration, setDuration] = useState('7d');
     const [records, setRecords] = useState<any[]>([]);
     const [consents, setConsents] = useState<any[]>([]);
@@ -43,6 +52,11 @@ const PatientDashboard: React.FC = () => {
     const [profiles, setProfiles] = useState<Profile[]>([{ id: null, name: 'Me', relationship: 'Primary' }]);
     const [selectedProfile, setSelectedProfile] = useState<Profile>({ id: null, name: 'Me', relationship: 'Primary' });
     const [showAddMember, setShowAddMember] = useState(false);
+
+    const handleLogout = () => {
+        localStorage.clear();
+        navigate('/login');
+    };
 
     useEffect(() => {
         const hasSeen = localStorage.getItem('hasSeenBasicsPrompt');
@@ -151,7 +165,9 @@ const PatientDashboard: React.FC = () => {
                 if (selectedProfile.id) return c.subjectProfileId === selectedProfile.id;
                 return !c.subjectProfileId; // Primary
             });
-            setConsents(filtered);
+            // Sort by latest granted (validFrom descending)
+            const sorted = filtered.sort((a: any, b: any) => new Date(b.validFrom).getTime() - new Date(a.validFrom).getTime());
+            setConsents(sorted);
         } catch (e) { console.error(e); }
     }
 
@@ -278,14 +294,20 @@ const PatientDashboard: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col">
-            <Navbar role="PATIENT" />
+            <Navbar
+                role="PATIENT"
+                profiles={profiles}
+                currentProfile={selectedProfile}
+                onSelectProfile={setSelectedProfile}
+                onAddFamilyMember={() => setShowAddMember(true)}
+            />
 
             <div className="flex max-w-7xl mx-auto w-full flex-1">
                 {/* 1. LEFT SIDEBAR */}
                 <DashboardSidebar
                     activeTab={activeTab}
                     setActiveTab={setActiveTab}
-                    onLogout={() => { /* standard logout */ }}
+                    onLogout={handleLogout}
                     showWomensHealth={isFemale}
                 />
 
@@ -296,12 +318,7 @@ const PatientDashboard: React.FC = () => {
                     <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div>
                             <div className="flex items-center gap-4 mb-2">
-                                <ProfileSwitcher
-                                    currentProfile={selectedProfile}
-                                    profiles={profiles}
-                                    onSelectProfile={setSelectedProfile}
-                                    onAddFamilyMember={() => setShowAddMember(true)}
-                                />
+                                {/* Profile Switcher Moved to Navbar */}
                             </div>
                             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
                                 {activeTab === 'overview' ? 'Dashboard Overview' :
@@ -313,18 +330,7 @@ const PatientDashboard: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Patient Code Badge (Moved from old header) */}
-                        <div className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-mono text-slate-500 flex items-center gap-3 shadow-sm">
-                            <span className="font-bold uppercase text-[10px] tracking-widest text-slate-400">Patient Code</span>
-                            <span className="text-blue-600 font-bold text-lg">{localStorage.getItem('patientCode') || 'N/A'}</span>
-                            <button
-                                onClick={() => navigator.clipboard.writeText(localStorage.getItem('patientCode') || '')}
-                                className="text-slate-400 hover:text-blue-600 transition-colors"
-                                title="Copy"
-                            >
-                                <Copy size={14} />
-                            </button>
-                        </div>
+
                     </div>
 
 
@@ -341,17 +347,20 @@ const PatientDashboard: React.FC = () => {
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                                 {/* Main Records grid */}
                                 <div className="lg:col-span-8 space-y-6">
-                                    <div className="flex items-center justify-between">
-                                        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                            <ClipboardCheck className="text-blue-600" /> All Medical Reports
-                                        </h2>
-                                        <div className="text-sm text-slate-500">
-                                            Showing {records.filter(r => r.type !== 'PRESCRIPTION' && r.type !== 'INSURANCE').length} records
-                                        </div>
-                                    </div>
+
 
                                     {/* Ongoing Medicines Section */}
                                     <OngoingMedicines subjectProfileId={selectedProfile.id} refreshTrigger={medsRefreshTrigger} />
+
+                                    {/* Lab Reports Header */}
+                                    <div className="flex items-center justify-between mt-8 mb-4">
+                                        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                            <FileText className="text-blue-600" /> Lab Reports
+                                        </h2>
+                                        <div className="text-sm text-slate-500">
+                                            Showing {records.filter(r => r.type !== 'PRESCRIPTION' && r.type !== 'INSURANCE').length} reports
+                                        </div>
+                                    </div>
 
                                     {/* Records List (Existing Logic) */}
                                     {records.filter(r => r.type !== 'PRESCRIPTION' && r.type !== 'INSURANCE').length === 0 && (
@@ -465,19 +474,25 @@ const PatientDashboard: React.FC = () => {
 
                                 {/* Sidebar Actions (Upload/Women's Health) - Kept on Right for 'Records' view as utility panel */}
                                 <div className="lg:col-span-4 space-y-6">
-                                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                                        <h3 className="font-bold text-slate-900 mb-1">Add New Record</h3>
-                                        <p className="text-sm text-slate-500 mb-4">Securely upload lab reports or prescriptions.</p>
+                                    <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-2xl shadow-lg relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                                            <FileText size={100} className="text-white transform rotate-12 translate-x-4 -translate-y-4" />
+                                        </div>
 
-                                        <button
-                                            onClick={handleUploadClick}
-                                            disabled={loading}
-                                            className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-bold transition-all shadow-md disabled:opacity-70"
-                                        >
-                                            {loading ? <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Uploading...</span> : <><Plus size={20} /> Upload File</>}
-                                        </button>
-                                        <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept=".pdf,.jpg,.jpeg,.png" />
-                                        <p className="text-xs text-center text-slate-400 mt-3">Supports PDF, JPG, PNG (Max 10MB)</p>
+                                        <div className="relative z-10">
+                                            <h3 className="font-bold text-white mb-1 text-lg">Add New Record</h3>
+                                            <p className="text-sm text-blue-100 mb-6">Securely upload lab reports or prescriptions.</p>
+
+                                            <button
+                                                onClick={handleUploadClick}
+                                                disabled={loading}
+                                                className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-white hover:bg-blue-50 text-blue-700 rounded-xl font-bold transition-all shadow-md disabled:opacity-70 group-hover:shadow-xl"
+                                            >
+                                                {loading ? <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin"></div> Uploading...</span> : <><Plus size={20} /> Upload File</>}
+                                            </button>
+                                            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept=".pdf,.jpg,.jpeg,.png" />
+                                            <p className="text-[10px] text-center text-blue-200/80 mt-3 font-medium">Supports PDF, JPG, PNG (Max 10MB)</p>
+                                        </div>
                                     </div>
 
                                     {/* WOMEN'S HEALTH BUTTON REMOVED */}
@@ -508,10 +523,7 @@ const PatientDashboard: React.FC = () => {
                         {/* 3. TIMELINE */}
                         {activeTab === 'timeline' && (
                             <div className="space-y-6">
-                                <div className="flex items-center justify-between max-w-3xl mx-auto">
-                                    <h3 className="text-xl font-bold text-slate-800">Health Vault</h3>
-                                    <button onClick={() => alert("Coming soon")} className="text-sm font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg">Connect Hospital</button>
-                                </div>
+
                                 <PatientTimeline records={records.filter(r => r.type !== 'PRESCRIPTION' && r.type !== 'INSURANCE')} />
                             </div>
                         )}

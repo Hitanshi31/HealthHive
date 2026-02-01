@@ -18,10 +18,10 @@ const DashboardSidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onL
     ];
 
     if (showWomensHealth) {
-        navItems.push({ id: 'womens-health', label: "Women's Health", icon: <Droplets size={20} className="text-rose-500" /> });
+        navItems.push({ id: 'womens-health', label: "Women's Health", icon: <Droplets size={20} /> });
     }
 
-    navItems.push({ id: 'emergency', label: 'Emergency', icon: <Activity size={20} className="text-red-500" /> });
+
 
     return (
         <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col h-[calc(100vh-64px)] sticky top-16">
@@ -48,7 +48,7 @@ const DashboardSidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onL
             <div className="mt-auto p-6 border-t border-slate-100">
                 <button
                     onClick={onLogout}
-                    className="flex items-center gap-3 text-slate-400 hover:text-red-600 transition-colors text-sm font-bold w-full px-4"
+                    className="flex items-center gap-3 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 transition-all text-sm font-bold w-full px-4 py-3 rounded-xl shadow-sm hover:shadow-md border border-blue-100"
                 >
                     <LogOut size={18} />
                     Log Out

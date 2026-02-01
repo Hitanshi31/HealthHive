@@ -1,41 +1,88 @@
 import { useNavigate } from 'react-router-dom';
-import { logout } from '../services/api';
-import { Shield, LogOut, User, Menu } from 'lucide-react';
 import { useState } from 'react';
+import { Shield, Activity, Check, Copy, Menu, LogOut } from 'lucide-react';
+import { logout } from '../services/api';
+import ProfileSwitcher, { type Profile } from './ProfileSwitcher';
 
-const Navbar = ({ role }: { role: string }) => {
+interface NavbarProps {
+    role: string;
+    profiles?: Profile[];
+    currentProfile?: Profile;
+    onSelectProfile?: (profile: Profile) => void;
+    onAddFamilyMember?: () => void;
+}
+
+const Navbar = ({ role, profiles, currentProfile, onSelectProfile, onAddFamilyMember }: NavbarProps) => {
     const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    const userId = role === 'PATIENT' ? localStorage.getItem('patientCode') : localStorage.getItem('doctorCode');
+    const label = role === 'PATIENT' ? 'Patient ID' : 'Doctor ID';
+
+    const handleCopy = () => {
+        if (userId) {
+            navigator.clipboard.writeText(userId);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
 
     return (
         <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 font-sans shadow-sm">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-16">
-                    <div className="flex items-center cursor-pointer gap-3" onClick={() => navigate(role === 'PATIENT' ? '/dashboard' : '/doctor')}>
-                        <div className="bg-blue-600 p-1.5 rounded-lg shadow-sm">
-                            <Shield className="h-6 w-6 text-white" />
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center cursor-pointer gap-3" onClick={() => navigate(role === 'PATIENT' ? '/dashboard' : '/doctor')}>
+                            <div className="bg-blue-600 p-1.5 rounded-lg shadow-sm">
+                                <Shield className="h-6 w-6 text-white" />
+                            </div>
+                            <div>
+                                <span className="font-bold text-xl text-slate-800 tracking-tight block leading-none">HealthHive</span>
+                                <span className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Secure Health</span>
+                            </div>
                         </div>
-                        <div>
-                            <span className="font-bold text-xl text-slate-800 tracking-tight block leading-none">HealthHive</span>
-                            <span className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Secure Health</span>
+
+                        {/* ID Display (Moved from Right) */}
+                        <div className="hidden sm:flex items-center gap-3 px-4 py-1.5 bg-blue-50 border border-blue-200 rounded-xl shadow-sm hover:shadow-md transition-all">
+                            <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600">{label}:</span>
+                            <span className="text-sm font-mono font-bold text-blue-900">{userId || 'N/A'}</span>
+                            <button
+                                onClick={handleCopy}
+                                className="text-blue-400 hover:text-blue-700 transition-colors ml-1"
+                                title="Copy ID"
+                            >
+                                {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                            </button>
                         </div>
                     </div>
+
+                    {/* Centered Emergency Button */}
+                    {role === 'PATIENT' && (
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                            <button
+                                onClick={() => navigate('/dashboard?tab=emergency')}
+                                className="flex items-center gap-2 bg-red-600 text-white px-6 py-2 rounded-full font-bold shadow-md hover:bg-red-700 hover:shadow-lg transition-all"
+                            >
+                                <Activity size={18} />
+                                Emergency
+                            </button>
+                        </div>
+                    )}
 
                     <div className="hidden md:flex items-center gap-6">
-                        <div className={`flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full border ${role === 'PATIENT' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-green-50 text-green-700 border-green-100'}`}>
-                            <User size={14} />
-                            <span>{role === 'PATIENT' ? 'PATIENT PORTAL' : 'DOCTOR ACCESS'}</span>
-                        </div>
-                        <div className="h-6 w-px bg-slate-200"></div>
-                        <button
-                            onClick={logout}
-                            className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-red-600 transition-colors group"
-                        >
-                            <LogOut size={16} className="group-hover:translate-x-1 transition-transform" />
-                            Logout
-                        </button>
+                        {/* Profile Switcher (Right of ID) */}
+                        {role === 'PATIENT' && profiles && currentProfile && onSelectProfile && onAddFamilyMember && (
+                            <ProfileSwitcher
+                                profiles={profiles}
+                                currentProfile={currentProfile}
+                                onSelectProfile={onSelectProfile}
+                                onAddFamilyMember={onAddFamilyMember}
+                            />
+                        )}
                     </div>
 
+                    {/* Mobile Menu Button */}
                     <div className="md:hidden flex items-center">
                         <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-slate-600">
                             <Menu size={24} />

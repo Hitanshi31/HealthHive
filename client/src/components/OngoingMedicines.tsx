@@ -50,6 +50,37 @@ const OngoingMedicines: React.FC<OngoingMedicinesProps> = ({ subjectProfileId, t
     const handleDelete = async (med: Medicine) => {
         if (confirm(`Are you sure you want to remove ${med.name}?`)) {
             try {
+                // Check if Manual Entry (Self-reported)
+                if ((med as any).isManual) {
+                    // Fetch current basics first to preserve other fields
+                    const token = localStorage.getItem('token');
+                    if (!token) return;
+                    const userId = JSON.parse(atob(token.split('.')[1])).userId;
+
+                    const res = await api.get(`/user/${userId}/health-basics`);
+                    const basics = res.data?.healthBasics || {};
+
+                    // Filter out the deleted med
+                    const currentList = basics.currentMedications ? basics.currentMedications.split(',') : [];
+                    const newList = currentList
+                        .map((s: string) => s.trim())
+                        .filter((s: string) => s && s.toLowerCase() !== med.name.toLowerCase())
+                        .join(', ');
+
+                    // Update Profile
+                    await api.put('/user/health-basics', {
+                        ...basics,
+                        currentMedications: newList
+                    });
+
+                    // Optimistic Update
+                    setMedicines(prev => ({
+                        ...prev,
+                        active: prev.active.filter(m => m.name !== med.name)
+                    }));
+                    return;
+                }
+
                 // Determine ID to delete: recordId (if exists) or fallback
                 const idToDelete = med.recordId;
                 console.log("[Delete] Attempting to delete medicine:", med.name, "ID:", idToDelete);
@@ -139,7 +170,7 @@ const OngoingMedicines: React.FC<OngoingMedicinesProps> = ({ subjectProfileId, t
             {/* Active Medications */}
             {medicines.active.length > 0 && (
                 <div className="space-y-3">
-                    <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <h3 className="text-xl font-bold text-slate-700 flex items-center gap-2">
                         <Pill className="text-blue-600" size={16} /> Ongoing Medications
                     </h3>
                     <div className="grid gap-3">
