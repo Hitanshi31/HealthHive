@@ -5,7 +5,7 @@ import { X, UserPlus, Calendar, User, Heart } from 'lucide-react';
 interface AddFamilyMemberModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (newDependent?: any) => void;
 }
 
 const AddFamilyMemberModal: React.FC<AddFamilyMemberModalProps> = ({ isOpen, onClose, onSuccess }) => {
@@ -21,7 +21,7 @@ const AddFamilyMemberModal: React.FC<AddFamilyMemberModalProps> = ({ isOpen, onC
         e.preventDefault();
         setLoading(true);
         try {
-            await createDependent({
+            const newDependent = await createDependent({
                 name,
                 dateOfBirth: dob,
                 gender,
@@ -32,7 +32,7 @@ const AddFamilyMemberModal: React.FC<AddFamilyMemberModalProps> = ({ isOpen, onC
                     currentMedications: []
                 }
             });
-            onSuccess();
+            onSuccess(newDependent);
             onClose();
             // Reset form
             setName('');

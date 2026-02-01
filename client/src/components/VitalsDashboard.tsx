@@ -62,9 +62,10 @@ const VitalCard: React.FC<VitalCardProps> = ({ title, value, unit, status, icon,
 
 interface VitalsDashboardProps {
     patientId: string | null;
+    subjectProfileId?: string | null;
 }
 
-const VitalsDashboard: React.FC<VitalsDashboardProps> = ({ patientId }) => {
+const VitalsDashboard: React.FC<VitalsDashboardProps> = ({ patientId, subjectProfileId }) => {
     const [connectedDevice, setConnectedDevice] = useState<any>(null);
     const [scanning, setScanning] = useState(false);
     // const [vitals, setVitals] = useState<any[]>([]); // Unused for now
@@ -83,16 +84,12 @@ const VitalsDashboard: React.FC<VitalsDashboardProps> = ({ patientId }) => {
         if (patientId) {
             loadVitals();
         }
-    }, [patientId]);
+    }, [patientId, subjectProfileId]);
 
     const loadVitals = async () => {
         if (!patientId) return;
-        const history = await getVitals(patientId);
+        const history = await getVitals(patientId, subjectProfileId);
         // setVitals(history);
-
-        // Simple hydration of history from backend (Optional enhancement)
-        // If history exists, we could map it to currentReadings to show past trends on load.
-        // For now, we leave as is to respect the "New dashboard" simplicity, but logging it removes the lint warning.
         console.log("Loaded vitals history:", history.length);
     };
 
@@ -104,19 +101,17 @@ const VitalsDashboard: React.FC<VitalsDashboardProps> = ({ patientId }) => {
                 setConnectedDevice(device);
                 const server = await connectToDevice(device, () => setConnectedDevice(null));
 
-                // UUIDs (Should match ble.service.ts)
                 const HR_SERVICE = 0x180D;
                 const HR_CHAR = 0x2A37;
                 const TEMP_SERVICE = 0x1809;
                 const TEMP_CHAR = 0x2A1C;
 
                 const handleVitalUpdate = async (data: any) => {
-                    // Update State
                     setCurrentReadings((prev: any) => {
-                        const type = data.type; // HR, BP, etc.
+                        const type = data.type;
                         if (!prev[type]) return prev;
 
-                        const newHistory = [...prev[type].history, data.value].slice(-10); // Keep last 10
+                        const newHistory = [...prev[type].history, data.value].slice(-10);
                         return {
                             ...prev,
                             [type]: {
@@ -127,17 +122,20 @@ const VitalsDashboard: React.FC<VitalsDashboardProps> = ({ patientId }) => {
                         };
                     });
 
-                    // Auto-save to backend
+                    // Auto-save
                     if (patientId) {
                         try {
-                            await saveVital({
+                            const payload: any = {
                                 patientId,
                                 type: data.type,
                                 value: data.value,
                                 unit: data.unit,
                                 source: 'device',
                                 timestamp: new Date()
-                            });
+                            };
+                            if (subjectProfileId) payload.subjectProfileId = subjectProfileId;
+
+                            await saveVital(payload);
                         } catch (e) {
                             console.error("Failed to auto-save vital", e);
                         }

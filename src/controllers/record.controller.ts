@@ -342,30 +342,66 @@ export const getOngoingMedicines = async (req: Request, res: Response): Promise<
 
         // 4. Also fetch manually entered medications from User Profile
         // This ensures that even if no prescription record exists (e.g. self-reported), it shows up.
-        // Also helps if AI updated the profile but record.prescription logic was skipped/failed.
-        const userProfile = await User.findById(patientId);
-        if (userProfile && userProfile.healthBasics && userProfile.healthBasics.currentMedications) {
-            const manualMeds = userProfile.healthBasics.currentMedications.split(',').map(s => s.trim()).filter(Boolean);
-            manualMeds.forEach(medStr => {
-                // Check if this string is already in activeMeds (approximate fuzzy match)
-                const alreadyExists = activeMeds.some(am =>
-                    medStr.toLowerCase().includes(am.name.toLowerCase()) ||
-                    am.name.toLowerCase().includes(medStr.toLowerCase())
-                );
+        // ONLY valid for Primary Profile (since Manual Meds are stored on Root User)
+        if (!querySubjectProfileId) {
+            const userProfile = await User.findById(patientId);
+            if (userProfile && userProfile.healthBasics && userProfile.healthBasics.currentMedications) {
+                const manualMeds = userProfile.healthBasics.currentMedications.split(',').map(s => s.trim()).filter(Boolean);
+                manualMeds.forEach(medStr => {
+                    const alreadyExists = activeMeds.some(am =>
+                        medStr.toLowerCase().includes(am.name.toLowerCase()) ||
+                        am.name.toLowerCase().includes(medStr.toLowerCase())
+                    );
 
-                if (!alreadyExists) {
-                    activeMeds.push({
-                        name: medStr, // Full string as name since it's unstructured
-                        dosage: 'Self-reported', // Marker
-                        frequency: 'As needed',
-                        duration: 'Ongoing',
-                        startDate: userProfile.createdAt || new Date(),
-                        doctorId: 'Self-reported',
-                        recordId: 'profile-' + Math.random().toString(36).substr(2, 9),
-                        isManual: true
-                    });
+                    if (!alreadyExists) {
+                        activeMeds.push({
+                            name: medStr,
+                            dosage: 'Self-reported',
+                            frequency: 'As needed',
+                            duration: 'Ongoing',
+                            startDate: userProfile.createdAt || new Date(),
+                            doctorId: 'Self-reported',
+                            recordId: 'profile-' + Math.random().toString(36).substr(2, 9),
+                            isManual: true
+                        });
+                    }
+                });
+            }
+        } else {
+            // Fetch Dependents Manual Meds
+            const userProfile = await User.findById(patientId);
+            const dependent = userProfile?.dependents?.find(d => d.id === querySubjectProfileId);
+
+            if (dependent && dependent.healthBasics && dependent.healthBasics.currentMedications) {
+                // Dependents usually store as array of strings in model, but let's check schema.
+                // Schema says [String]. But let's handle if it comes as comma-string too just in case or array.
+                let manualMeds: string[] = [];
+                if (Array.isArray(dependent.healthBasics.currentMedications)) {
+                    manualMeds = dependent.healthBasics.currentMedications;
+                } else if (typeof dependent.healthBasics.currentMedications === 'string') {
+                    manualMeds = (dependent.healthBasics.currentMedications as string).split(',').map(s => s.trim()).filter(Boolean);
                 }
-            });
+
+                manualMeds.forEach(medStr => {
+                    const alreadyExists = activeMeds.some(am =>
+                        medStr.toLowerCase().includes(am.name.toLowerCase()) ||
+                        am.name.toLowerCase().includes(medStr.toLowerCase())
+                    );
+
+                    if (!alreadyExists) {
+                        activeMeds.push({
+                            name: medStr,
+                            dosage: 'Self-reported',
+                            frequency: 'As needed',
+                            duration: 'Ongoing',
+                            startDate: (dependent as any).createdAt || new Date(), // Dependent schema might not have createdAt, fallback
+                            doctorId: 'Self-reported',
+                            recordId: 'profile-' + Math.random().toString(36).substr(2, 9),
+                            isManual: true
+                        });
+                    }
+                });
+            }
         }
 
         res.json({ active: activeMeds, past: pastMeds });

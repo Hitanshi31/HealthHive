@@ -6,6 +6,10 @@ interface AuthRequest extends Request {
     user?: any;
 }
 
+const generatePatientCode = () => {
+    return 'HH-PAT-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+};
+
 export const createDependent = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { userId } = req.user;
@@ -18,6 +22,7 @@ export const createDependent = async (req: AuthRequest, res: Response): Promise<
 
         const newDependent = {
             id: randomUUID(),
+            patientCode: generatePatientCode(),
             name,
             dateOfBirth,
             gender,
@@ -103,16 +108,31 @@ export const deleteDependent = async (req: AuthRequest, res: Response): Promise<
         const { userId } = req.user;
         const { id } = req.params;
 
-        const user = await User.findByIdAndUpdate(
-            userId,
-            { $pull: { dependents: { id } } },
-            { new: true }
-        );
+        console.log(`[DELETE] Request to delete dependent ${id} from user ${userId}`);
+
+        const user = await User.findById(userId);
 
         if (!user) {
+            console.log('[DELETE] User not found');
             res.status(404).json({ error: 'User not found' });
             return;
         }
+
+        // Check if dependent exists
+        const exists = user.dependents?.some(d => d.id === id);
+        if (!exists) {
+            console.log('[DELETE] Dependent not found in list');
+            res.status(404).json({ error: 'Dependent not found' });
+            return;
+        }
+
+        // Filter out the dependent
+        if (user.dependents) {
+            user.dependents = user.dependents.filter(d => d.id !== id);
+        }
+
+        await user.save();
+        console.log('[DELETE] Successfully removed dependent');
 
         res.json({ message: 'Dependent deleted successfully' });
     } catch (error) {

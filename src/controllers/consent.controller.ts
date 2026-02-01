@@ -26,14 +26,31 @@ export const getDoctorPatients = async (req: AuthRequest, res: Response) => {
 
         console.log(`getDoctorPatients: Fetching for Doctor ID: ${doctorId}`);
 
+        // AUTO-REVOCATION CLEANUP
+        // Explicitly update status of expired consents to 'REVOKED'
+        // This ensures DB state matches validity even if no one manually revoked
+        const now = new Date();
+        const expirationResult = await Consent.updateMany(
+            {
+                doctorId,
+                status: 'ACTIVE',
+                validUntil: { $lte: now }
+            },
+            { status: 'REVOKED' }
+        );
+
+        if (expirationResult.modifiedCount > 0) {
+            console.log(`[AUTO-REVOKE] Cleaned up ${expirationResult.modifiedCount} expired consents for Doctor ${doctorId}`);
+        }
+
         // Find all ACTIVE consents for this doctor that are still valid
         const consents = await Consent.find({
             doctorId,
             status: 'ACTIVE',
-            validUntil: { $gt: new Date() }
+            validUntil: { $gt: now }
         }).populate('patientId', 'email patientCode'); // Get basic patient details
 
-        console.log(`getDoctorPatients: Found ${consents.length} consents`);
+        console.log(`getDoctorPatients: Found ${consents.length} active consents`);
 
         // Map to a clean list of patients
         const patients = consents.map((c: any) => {
@@ -79,14 +96,32 @@ export const grantConsent = async (req: Request, res: Response): Promise<void> =
             finalDoctorId = doctorUser._id;
         }
 
-        const consent = await Consent.create({
+        // Check for existing active consent to avoid duplicates
+        const existingConsent = await Consent.findOne({
             patientId: user.userId,
-            subjectProfileId: subjectProfileId || null, // Default to Primary if null
             doctorId: finalDoctorId,
-            validFrom: new Date(),
-            validUntil: new Date(validUntil),
+            subjectProfileId: subjectProfileId || null,
             status: 'ACTIVE'
         });
+
+        let consent;
+        if (existingConsent) {
+            // Update existing
+            console.log(`grantConsent: Updating existing consent ${existingConsent._id}`);
+            existingConsent.validUntil = new Date(validUntil);
+            existingConsent.validFrom = new Date(); // Reset start time to now
+            consent = await existingConsent.save();
+        } else {
+            // Create new
+            consent = await Consent.create({
+                patientId: user.userId,
+                subjectProfileId: subjectProfileId || null, // Default to Primary if null
+                doctorId: finalDoctorId,
+                validFrom: new Date(),
+                validUntil: new Date(validUntil),
+                status: 'ACTIVE'
+            });
+        }
 
         await AuditLog.create({
             patientId: user.userId,
@@ -108,26 +143,41 @@ export const revokeConsent = async (req: Request, res: Response): Promise<void> 
         const user = getUser(req);
         const { consentId } = req.params;
 
-        const consent = await Consent.findByIdAndUpdate(
-            consentId,
-            { status: 'REVOKED' },
-            { new: true }
-        );
+        // 1. Find the target consent to identify the relationship
+        const targetConsent = await Consent.findById(consentId);
 
-        if (!consent) {
+        if (!targetConsent) {
             res.status(404).json({ error: 'Consent not found' });
             return;
         }
+
+        // 2. Revoke ALL active consents for this specific Patient-Doctor-Profile connection
+        // This cleans up any historical duplicates or ghost sessions
+        const result = await Consent.updateMany(
+            {
+                patientId: targetConsent.patientId,
+                doctorId: targetConsent.doctorId,
+                subjectProfileId: targetConsent.subjectProfileId,
+                status: 'ACTIVE'
+            },
+            { status: 'REVOKED' }
+        );
+
+        console.log(`[REVOKE] Revoked ${result.modifiedCount} consent records for P:${targetConsent.patientId} -> D:${targetConsent.doctorId}`);
+
+        // Update the in-memory object to return
+        targetConsent.status = 'REVOKED';
 
         await AuditLog.create({
             patientId: user.userId,
             actorId: user.userId,
             action: "REVOKE_CONSENT",
             resource: "CONSENT",
-            purpose: "PATIENT_REQUEST"
+            purpose: "PATIENT_REQUEST",
+            details: `Revoked ${result.modifiedCount} active sessions`
         });
 
-        res.json(consent);
+        res.json(targetConsent);
     } catch (error) {
         console.error("Revoke consent error:", error);
         res.status(500).json({ error: 'Revocation failed' });
@@ -148,7 +198,7 @@ export const getConsents = async (req: Request, res: Response): Promise<void> =>
         let consents: any[] = [];
         if (user.role === 'PATIENT') {
             const rawConsents = await Consent.find({ patientId: user._id })
-                .populate('doctorId', 'email _id');
+                .populate('doctorId', 'email _id doctorCode');
 
             // Map to preserve structure: doctorId (ID) + doctor (Object)
             consents = rawConsents.map(c => {
@@ -156,7 +206,7 @@ export const getConsents = async (req: Request, res: Response): Promise<void> =>
                 return {
                     ...c.toObject(),
                     doctorId: doc._id,
-                    doctor: { id: doc._id, email: doc.email }
+                    doctor: { id: doc._id, email: doc.email, doctorCode: doc.doctorCode }
                 };
             });
 

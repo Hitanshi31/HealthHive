@@ -16,6 +16,7 @@ const DoctorDashboard: React.FC = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPrescribeModal, setShowPrescribeModal] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const [refreshKey, setRefreshKey] = useState(0);
 
     // Navigation simplified - defaulting to patients view
@@ -82,6 +83,23 @@ const DoctorDashboard: React.FC = () => {
         navigate('/login');
     };
 
+    // Filter Logic
+    const filteredPatients = patients.filter(p => {
+        if (!searchQuery) return true;
+        const query = searchQuery.toLowerCase();
+
+        // Construct searchable text from available fields
+        const searchableText = `
+            ${p.patientCode || ''} 
+            ${p.name || ''} 
+            ${p.email || ''} 
+            ${p.phoneNumber || ''} 
+            ${p.subjectProfileId ? 'dependent' : 'primary'}
+        `.toLowerCase();
+
+        return searchableText.includes(query);
+    });
+
     return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col">
             <Navbar role="DOCTOR" />
@@ -90,18 +108,20 @@ const DoctorDashboard: React.FC = () => {
                 {/* 1. LEFT SIDEBAR */}
                 <DoctorSidebar
                     onLogout={handleLogout}
-                    patients={patients}
+                    patients={filteredPatients}
                     selectedPatientId={selectedPatient ? `${selectedPatient.patientId}-${selectedPatient.subjectProfileId || 'primary'}` : null}
                     onSelectPatient={(p) => {
                         if (p) handlePatientSelect(p);
                         else setSelectedPatient(null);
                     }}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
                 />
 
                 {/* 2. RIGHT PANEL CONTENT AREA */}
                 <main className="flex-1 p-8 overflow-y-auto w-full">
                     {/* Header Section */}
-                    <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div>
                             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
                                 {selectedPatient ? 'Patient Medical Records' : 'Doctor Dashboard'}
@@ -112,8 +132,6 @@ const DoctorDashboard: React.FC = () => {
                                 </span>
                             </div>
                         </div>
-
-
                     </div>
 
                     {/* View Logic: Patient List vs Patient Details */}
@@ -124,7 +142,7 @@ const DoctorDashboard: React.FC = () => {
                                 <div>
                                     <div className="flex items-center justify-between mb-6">
                                         <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                            <Users className="text-blue-600" /> Active Patients <span className="text-sm font-normal text-slate-500">({patients.length})</span>
+                                            <Users className="text-blue-600" /> Active Patients <span className="text-sm font-normal text-slate-500">({filteredPatients.length} / {patients.length})</span>
                                         </h2>
                                         <button onClick={fetchPatients} className="text-blue-600 hover:text-blue-800 text-sm font-bold flex items-center gap-1">
                                             Refresh List
@@ -139,9 +157,25 @@ const DoctorDashboard: React.FC = () => {
                                             <h3 className="text-lg font-medium text-slate-700">No Active Patients</h3>
                                             <p className="text-slate-500 max-w-sm mx-auto mt-1">Share your Doctor ID with patients to get access to their records.</p>
                                         </div>
+                                    ) : filteredPatients.length === 0 ? (
+                                        <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200">
+                                            <div className="bg-slate-50 p-4 rounded-full inline-block mb-4">
+                                                <Users className="text-slate-400" size={32} />
+                                            </div>
+                                            <h3 className="text-lg font-medium text-slate-700">No Filtered Results</h3>
+                                            <p className="text-slate-500 max-w-sm mx-auto mt-1">
+                                                No patients match "<strong>{searchQuery}</strong>". Try a different ID or name.
+                                            </p>
+                                            <button
+                                                onClick={() => setSearchQuery('')}
+                                                className="mt-4 text-blue-600 font-bold hover:underline"
+                                            >
+                                                Clear Search
+                                            </button>
+                                        </div>
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {patients.map((p) => {
+                                            {filteredPatients.map((p) => {
                                                 const compositeKey = `${p.patientId}-${p.subjectProfileId || 'primary'}`;
                                                 return (
                                                     <div
@@ -158,7 +192,10 @@ const DoctorDashboard: React.FC = () => {
                                                                 {p.email[0].toUpperCase()}
                                                             </div>
                                                             <div>
-                                                                <h4 className="font-bold text-slate-900 text-lg group-hover:text-blue-700 transition-colors">{p.patientCode || 'Unknown ID'}</h4>
+                                                                <h4 className="font-bold text-slate-900 text-lg group-hover:text-blue-700 transition-colors">
+                                                                    {/* Simple highlighting */}
+                                                                    {p.patientCode || 'Unknown ID'}
+                                                                </h4>
                                                                 <p className="text-xs text-slate-500 font-medium">{p.subjectProfileId ? 'Dependent Profile' : 'Primary Account'}</p>
                                                             </div>
                                                         </div>
@@ -169,6 +206,7 @@ const DoctorDashboard: React.FC = () => {
                                                             </span>
                                                         </div>
                                                         <p className="text-xs text-slate-400 mt-4 truncate">{p.email}</p>
+                                                        {p.name && <p className="text-xs text-slate-500 font-medium mt-1 truncate">{p.name}</p>}
                                                     </div>
                                                 );
                                             })}
@@ -177,50 +215,43 @@ const DoctorDashboard: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* EXPIRED SESSIONS TAB */}
-                            {activeTab === 'expired' && (
-                                <div>
-                                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-6">
-                                        <Clock className="text-amber-500" /> Expired Sessions
-                                    </h2>
-                                    {expiredPatients.length === 0 ? (
-                                        <div className="bg-slate-50 rounded-xl p-12 text-center border border-slate-200 border-dashed">
-                                            <p className="text-slate-400">No recently expired sessions.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {expiredPatients.map((p) => (
-                                                <div
-                                                    key={`expired-${p.patientId}`}
-                                                    className="bg-white p-6 rounded-2xl border border-slate-200 grayscale opacity-75 hover:opacity-100 transition-opacity relative group"
-                                                >
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setExpiredPatients(prev => prev.filter(ep => ep.patientId !== p.patientId));
-                                                        }}
-                                                        className="absolute top-2 right-2 p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                                                        title="Dismiss"
-                                                    >
-                                                        <X size={16} />
-                                                    </button>
-                                                    <div className="flex items-center gap-4 mb-4">
-                                                        <div className="w-12 h-12 rounded-full bg-slate-200 text-slate-400 flex items-center justify-center text-lg font-bold">
-                                                            {p.email[0].toUpperCase()}
-                                                        </div>
-                                                        <div>
-                                                            <h4 className="font-bold text-slate-600">{p.patientCode || 'Unknown ID'}</h4>
-                                                            <p className="text-xs text-slate-400">Session Expired</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="bg-amber-50 border border-amber-100 rounded px-3 py-2 flex items-center gap-2 text-xs font-bold text-amber-600">
-                                                        <Lock size={12} />
-                                                        Access Revoked
-                                                    </div>
+
+                            {expiredPatients.length === 0 ? (
+                                <div className="bg-slate-50 rounded-xl p-12 text-center border border-slate-200 border-dashed">
+                                    <p className="text-slate-400">No recently expired sessions.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {expiredPatients.map((p) => (
+                                        <div
+                                            key={`expired-${p.patientId}`}
+                                            className="bg-white p-6 rounded-2xl border border-slate-200 grayscale opacity-75 hover:opacity-100 transition-opacity relative group"
+                                        >
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setExpiredPatients(prev => prev.filter(ep => ep.patientId !== p.patientId));
+                                                }}
+                                                className="absolute top-2 right-2 p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                                                title="Dismiss"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                            <div className="flex items-center gap-4 mb-4">
+                                                <div className="w-12 h-12 rounded-full bg-slate-200 text-slate-400 flex items-center justify-center text-lg font-bold">
+                                                    {p.email[0].toUpperCase()}
                                                 </div>
-                                            ))}
+                                                <div>
+                                                    <h4 className="font-bold text-slate-600">{p.patientCode || 'Unknown ID'}</h4>
+                                                    <p className="text-xs text-slate-400">Session Expired</p>
+                                                </div>
+                                            </div>
+                                            <div className="bg-amber-50 border border-amber-100 rounded px-3 py-2 flex items-center gap-2 text-xs font-bold text-amber-600">
+                                                <Lock size={12} />
+                                                Access Revoked
+                                            </div>
                                         </div>
-                                    )}
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -361,22 +392,24 @@ const DoctorDashboard: React.FC = () => {
             </div>
 
             {/* Modal */}
-            {showPrescribeModal && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-                    <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
-                        <PrescriptionForm
-                            patientId={selectedPatient?.patientId}
-                            subjectProfileId={selectedPatient?.subjectProfileId}
-                            onSuccess={() => {
-                                setShowPrescribeModal(false);
-                                setRefreshKey(prev => prev + 1);
-                                handlePatientSelect(selectedPatient);
-                            }}
-                            onCancel={() => setShowPrescribeModal(false)}
-                        />
+            {
+                showPrescribeModal && (
+                    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+                            <PrescriptionForm
+                                patientId={selectedPatient?.patientId}
+                                subjectProfileId={selectedPatient?.subjectProfileId}
+                                onSuccess={() => {
+                                    setShowPrescribeModal(false);
+                                    setRefreshKey(prev => prev + 1);
+                                    handlePatientSelect(selectedPatient);
+                                }}
+                                onCancel={() => setShowPrescribeModal(false)}
+                            />
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
         </div>
     );
 };

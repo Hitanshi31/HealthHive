@@ -13,6 +13,7 @@ export interface IVital extends Document {
 
 const VitalSchema: Schema = new Schema({
     patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    subjectProfileId: { type: String, required: false }, // For Dependents
     type: {
         type: String,
         enum: ['BP', 'SPO2', 'HR', 'GLUCOSE', 'TEMP'],

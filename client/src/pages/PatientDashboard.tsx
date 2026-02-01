@@ -9,7 +9,7 @@ import PatientTimeline from '../components/PatientTimeline';
 import OngoingMedicines from '../components/OngoingMedicines';
 import { type Profile } from '../components/ProfileSwitcher';
 import AddFamilyMemberModal from '../components/AddFamilyMemberModal';
-import { listDependents } from '../services/dependentService';
+import { listDependents, deleteDependent } from '../services/dependentService';
 import WomensHealthMemory from '../components/WomensHealthMemory';
 import VitalsDashboard from '../components/VitalsDashboard';
 import ProfileDashboard from '../components/ProfileDashboard';
@@ -133,7 +133,8 @@ const PatientDashboard: React.FC = () => {
                 id: d.id,
                 name: d.name,
                 relationship: d.relationship,
-                gender: d.gender
+                gender: d.gender,
+                patientCode: d.patientCode
             }));
             const meProfile: Profile = {
                 id: null,
@@ -251,6 +252,23 @@ const PatientDashboard: React.FC = () => {
         }
     };
 
+    const handleDeleteProfile = async (profile: Profile) => {
+        if (!profile.id) return; // Cannot delete 'Me'
+        try {
+            await deleteDependent(profile.id);
+            // If deleted profile was selected, switch to Me
+            if (selectedProfile.id === profile.id) {
+                setSelectedProfile(profiles[0]); // Me
+            }
+            fetchProfiles(); // Refresh list
+            alert('Family member removed.');
+        } catch (error: any) {
+            console.error("Failed to delete profile", error);
+            const msg = error.response?.data?.error || error.message || "Unknown error";
+            alert(`Failed to delete profile: ${msg}`);
+        }
+    };
+
     const handleDeleteRecord = async (id: string) => {
         if (!confirm('Are you sure you want to delete this record?')) return;
         try {
@@ -292,6 +310,36 @@ const PatientDashboard: React.FC = () => {
         return gender === 'Female';
     }, [userData, selectedProfile]);
 
+    const [onboardingTargetId, setOnboardingTargetId] = useState<string | null>(null);
+    const [onboardingInitialData, setOnboardingInitialData] = useState<any>(null);
+
+    const handleFamilyMemberAdded = async (newDependent?: any) => {
+        await fetchProfiles();
+        if (newDependent) {
+            // Switch to new profile
+            const newProfile: Profile = {
+                id: newDependent.id,
+                name: newDependent.name,
+                relationship: newDependent.relationship,
+                gender: newDependent.gender,
+                patientCode: newDependent.patientCode
+            };
+            setSelectedProfile(newProfile);
+
+            // Trigger Onboarding
+            setOnboardingTargetId(newDependent.id);
+            setOnboardingInitialData({
+                fullName: newDependent.name,
+                gender: newDependent.gender,
+                dateOfBirth: newDependent.dateOfBirth,
+                // Pass empty fields to ensure controlled inputs if needed
+                emergencyContact: {},
+                healthBasics: {}
+            });
+            setShowBasicsModal(true);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col">
             <Navbar
@@ -300,6 +348,7 @@ const PatientDashboard: React.FC = () => {
                 currentProfile={selectedProfile}
                 onSelectProfile={setSelectedProfile}
                 onAddFamilyMember={() => setShowAddMember(true)}
+                onDeleteProfile={handleDeleteProfile}
             />
 
             <div className="flex max-w-7xl mx-auto w-full flex-1">
@@ -557,23 +606,74 @@ const PatientDashboard: React.FC = () => {
                                         </div>
                                     </div>
                                     {/* Active Consents */}
-                                    <div className="md:col-span-2 space-y-4">
-                                        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                                            <h3 className="font-bold text-slate-800 text-lg">Active Permissions</h3>
-                                        </div>
-                                        {consents.length === 0 && <div className="text-center py-10 text-slate-400">No active sessions.</div>}
-                                        {consents.map(c => (
-                                            <div key={c.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center"><Users size={20} /></div>
-                                                    <div>
-                                                        <p className="font-bold text-slate-900">Doctor ID: {c.doctorId}</p>
-                                                        <p className="text-green-600 text-xs font-bold">Expires: {new Date(c.validUntil).toLocaleDateString()}</p>
-                                                    </div>
-                                                </div>
-                                                {c.status === 'ACTIVE' && <button onClick={() => handleRevoke(c.id)} className="px-4 py-2 border border-red-200 text-red-600 text-sm font-bold rounded-lg hover:bg-red-50">Revoke</button>}
+                                    <div className="md:col-span-2 space-y-8">
+                                        {/* Active Section */}
+                                        <div>
+                                            <div className="flex items-center justify-between pb-2 border-b border-slate-200 mb-4">
+                                                <h3 className="font-bold text-slate-800 text-lg">Active Permissions</h3>
                                             </div>
-                                        ))}
+                                            {consents.filter(c => c.status === 'ACTIVE' && new Date(c.validUntil) > new Date()).length === 0 && (
+                                                <div className="text-center py-6 text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                                    No active permissions.
+                                                </div>
+                                            )}
+                                            <div className="space-y-4">
+                                                {consents.filter(c => c.status === 'ACTIVE' && new Date(c.validUntil) > new Date()).map(c => (
+                                                    <div key={c.id} className="bg-white p-5 rounded-xl border border-green-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative overflow-hidden">
+                                                        <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-bold">
+                                                                <Users size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-bold text-slate-900">Doctor ID: <span className="font-mono text-slate-600">{c.doctor?.doctorCode || c.doctorId}</span></p>
+                                                                <p className="text-green-700 text-xs font-bold flex items-center gap-1 mt-1">
+                                                                    <Clock size={12} /> Expires: {new Date(c.validUntil).toLocaleString()}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleRevoke(c.id)}
+                                                            className="px-4 py-2 border border-red-200 text-red-600 text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-red-50 transition-colors w-full sm:w-auto"
+                                                        >
+                                                            Revoke Access
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Expired Section */}
+                                        <div>
+                                            <div className="flex items-center justify-between pb-2 border-b border-slate-200 mb-4 mt-8">
+                                                <h3 className="font-bold text-slate-500 text-lg flex items-center gap-2">
+                                                    <Clock size={20} /> Expired Grant Records
+                                                </h3>
+                                            </div>
+                                            {consents.filter(c => c.status !== 'ACTIVE' || new Date(c.validUntil) <= new Date()).length === 0 && (
+                                                <div className="text-center py-4 text-slate-400 text-sm">No expired records.</div>
+                                            )}
+                                            <div className="space-y-4 opacity-75">
+                                                {consents.filter(c => c.status !== 'ACTIVE' || new Date(c.validUntil) <= new Date()).map(c => (
+                                                    <div key={c.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 grayscale-[50%] hover:grayscale-0 transition-all">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-slate-200 text-slate-500 rounded-full flex items-center justify-center">
+                                                                <Users size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-bold text-slate-700 text-sm">Doctor: {c.doctor?.doctorCode || c.doctorId}</p>
+                                                                <div className="flex items-center gap-3 mt-1">
+                                                                    <span className="text-slate-500 text-xs">Ended: {new Date(c.validUntil).toLocaleDateString()}</span>
+                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${c.status === 'REVOKED' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-slate-200 text-slate-600 border-slate-300'}`}>
+                                                                        {c.status === 'REVOKED' ? 'REVOKED' : 'EXPIRED'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -644,7 +744,7 @@ const PatientDashboard: React.FC = () => {
                         )}
 
                         {/* 6. VITALS */}
-                        {activeTab === 'vitals' && <VitalsDashboard patientId={selectedProfile.id || null} />}
+                        {activeTab === 'vitals' && <VitalsDashboard patientId={mainUserId} subjectProfileId={selectedProfile.id} />}
 
                         {/* 7. PROFILE */}
                         {activeTab === 'profile' && <ProfileDashboard patientId={selectedProfile.id || mainUserId} />}
@@ -665,8 +765,14 @@ const PatientDashboard: React.FC = () => {
                 </main>
             </div>
 
-            <HealthBasicsModal isOpen={showBasicsModal} onClose={handleBasicsSaved} onSaveSuccess={handleBasicsSaved} />
-            <AddFamilyMemberModal isOpen={showAddMember} onClose={() => setShowAddMember(false)} onSuccess={() => fetchProfiles()} />
+            <HealthBasicsModal
+                isOpen={showBasicsModal}
+                onClose={handleBasicsSaved}
+                onSaveSuccess={handleBasicsSaved}
+                patientId={onboardingTargetId || mainUserId}
+                initialData={onboardingInitialData || userData}
+            />
+            <AddFamilyMemberModal isOpen={showAddMember} onClose={() => setShowAddMember(false)} onSuccess={handleFamilyMemberAdded} />
 
             {showUploadModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">

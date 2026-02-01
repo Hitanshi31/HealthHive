@@ -10,19 +10,23 @@ interface NavbarProps {
     currentProfile?: Profile;
     onSelectProfile?: (profile: Profile) => void;
     onAddFamilyMember?: () => void;
+    onDeleteProfile?: (profile: Profile) => void;
 }
 
-const Navbar = ({ role, profiles, currentProfile, onSelectProfile, onAddFamilyMember }: NavbarProps) => {
+const Navbar = ({ role, profiles, currentProfile, onSelectProfile, onAddFamilyMember, onDeleteProfile }: NavbarProps) => {
     const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [copied, setCopied] = useState(false);
 
-    const userId = role === 'PATIENT' ? localStorage.getItem('patientCode') : localStorage.getItem('doctorCode');
+    const baseId = role === 'PATIENT' ? localStorage.getItem('patientCode') : localStorage.getItem('doctorCode');
+    // If viewing a dependent profile, show their ID. Otherwise show main ID.
+    const displayId = (role === 'PATIENT' && currentProfile?.patientCode) ? currentProfile.patientCode : baseId;
+
     const label = role === 'PATIENT' ? 'Patient ID' : 'Doctor ID';
 
     const handleCopy = () => {
-        if (userId) {
-            navigator.clipboard.writeText(userId);
+        if (displayId) {
+            navigator.clipboard.writeText(displayId);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
@@ -43,10 +47,9 @@ const Navbar = ({ role, profiles, currentProfile, onSelectProfile, onAddFamilyMe
                             </div>
                         </div>
 
-                        {/* ID Display (Moved from Right) */}
                         <div className="hidden sm:flex items-center gap-3 px-4 py-1.5 bg-blue-50 border border-blue-200 rounded-xl shadow-sm hover:shadow-md transition-all">
                             <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600">{label}:</span>
-                            <span className="text-sm font-mono font-bold text-blue-900">{userId || 'N/A'}</span>
+                            <span className="text-sm font-mono font-bold text-blue-900">{displayId || 'N/A'}</span>
                             <button
                                 onClick={handleCopy}
                                 className="text-blue-400 hover:text-blue-700 transition-colors ml-1"
@@ -78,6 +81,7 @@ const Navbar = ({ role, profiles, currentProfile, onSelectProfile, onAddFamilyMe
                                 currentProfile={currentProfile}
                                 onSelectProfile={onSelectProfile}
                                 onAddFamilyMember={onAddFamilyMember}
+                                onDeleteProfile={onDeleteProfile}
                             />
                         )}
                     </div>

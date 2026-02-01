@@ -12,6 +12,7 @@ export interface Dependent {
     dateOfBirth: string;
     gender: 'Male' | 'Female' | 'Other';
     relationship: string;
+    patientCode?: string;
     healthBasics: HealthBasics;
     womensHealth?: any; // Using any for simplicity as it mirrors the User's inner structure
 }

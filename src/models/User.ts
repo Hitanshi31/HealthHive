@@ -129,6 +129,7 @@ const UserSchema: Schema = new Schema({
         name: { type: String, required: true },
         dateOfBirth: { type: Date, required: true },
         gender: { type: String, enum: ['Male', 'Female', 'Other'], required: true },
+        patientCode: { type: String, unique: true, sparse: true },
         relationship: { type: String, required: true },
         healthBasics: {
             allergies: [String],

@@ -10,9 +10,12 @@ export const saveVital = async (vital: any) => {
     }
 };
 
-export const getVitals = async (patientId: string) => {
+export const getVitals = async (patientId: string, subjectProfileId?: string | null) => {
     try {
-        const res = await api.get(`/vitals/${patientId}`);
+        const params: any = {};
+        if (subjectProfileId) params.subjectProfileId = subjectProfileId;
+
+        const res = await api.get(`/vitals/${patientId}`, { params });
         return res.data;
     } catch (error) {
         console.error('Error fetching vitals:', error);

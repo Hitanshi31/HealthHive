@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { User, Phone, Heart, FileText, Lock, Activity, Save, Edit2, ShieldCheck, Mail, Calendar } from 'lucide-react';
 import { getProfile, updateProfile } from '../services/profile.service';
+import HealthBasicsModal from './HealthBasicsModal';
 
 interface ProfileDashboardProps {
     patientId: string | null;
@@ -10,6 +11,7 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ patientId }) => {
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
+    const [showHealthBasics, setShowHealthBasics] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -242,8 +244,8 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ patientId }) => {
                         <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                             <Activity size={20} className="text-red-500" /> Emergency Snapshot (Preview)
                         </h3>
-                        {/* Mock button as per request to Edit Emergency Info - ideally opens HealthBasicsModal */}
-                        <button className="text-blue-600 text-sm font-bold hover:underline" onClick={() => alert("Please use the 'Health Basics' modal on main dashboard to edit clinical data.")}>
+                        {/* Real button to open HealthBasicsModal */}
+                        <button className="text-blue-600 text-sm font-bold hover:underline" onClick={() => setShowHealthBasics(true)}>
                             Edit Clinical Data
                         </button>
                     </div>
@@ -320,7 +322,7 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ patientId }) => {
                         <div className="flex justify-between text-sm py-2 border-b border-slate-50">
                             <span className="text-slate-500">Patient ID</span>
                             <span className="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs select-all">
-                                {profile._id}
+                                {profile.patientCode || profile._id}
                             </span>
                         </div>
 
@@ -334,7 +336,20 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ patientId }) => {
                 </div>
 
             </div>
-        </div>
+            {
+                profile && (
+                    <HealthBasicsModal
+                        isOpen={showHealthBasics}
+                        onClose={() => setShowHealthBasics(false)}
+                        initialData={profile.healthBasics}
+                        onSaveSuccess={() => {
+                            setShowHealthBasics(false);
+                            loadProfile();
+                        }}
+                    />
+                )
+            }
+        </div >
     );
 };
 
