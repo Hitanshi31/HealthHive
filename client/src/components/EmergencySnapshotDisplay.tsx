@@ -1,6 +1,8 @@
 import React from 'react';
 import RiskAlerts from './RiskAlerts';
 import CriticalSummaryCard from './CriticalSummaryCard';
+import { Phone, Activity } from 'lucide-react';
+
 
 interface EmergencySnapshotDisplayProps {
     snapshot: any;
@@ -24,6 +26,69 @@ const EmergencySnapshotDisplay: React.FC<EmergencySnapshotDisplayProps> = ({ sna
                 {/* 2. Critical Summary */}
                 <h3 className="text-xl font-bold text-gray-800 mb-4 uppercase tracking-wide">Vital Information</h3>
                 <CriticalSummaryCard summary={snapshot.criticalSummary} />
+
+                {/* 2.1 Emergency Contact & Latest Vitals */}
+                <div className="grid md:grid-cols-2 gap-6 mb-8 mt-6">
+                    {/* Emergency Contact */}
+                    {snapshot.criticalSummary.emergencyContact && (
+                        <div className="bg-red-50 border border-red-100 rounded-xl p-5 shadow-sm">
+                            <h4 className="flex items-center gap-2 text-red-800 font-bold mb-3 uppercase text-sm tracking-wider">
+                                <Phone size={18} /> Emergency Contact
+                            </h4>
+                            <div>
+                                <p className="text-xl font-bold text-slate-900">{snapshot.criticalSummary.emergencyContact.name}</p>
+                                <a href={`tel:${snapshot.criticalSummary.emergencyContact.phone}`} className="text-lg text-blue-600 font-mono font-bold hover:underline block mt-1">
+                                    {snapshot.criticalSummary.emergencyContact.phone}
+                                </a>
+                                {snapshot.criticalSummary.emergencyContact.relation && (
+                                    <p className="text-sm text-slate-500 mt-1 uppercase text-[10px] font-bold tracking-wide">{snapshot.criticalSummary.emergencyContact.relation}</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Latest Vitals */}
+                    {snapshot.vitals && (
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 shadow-sm">
+                            <h4 className="flex items-center gap-2 text-blue-800 font-bold mb-3 uppercase text-sm tracking-wider">
+                                <Activity size={18} /> Latest Vitals
+                            </h4>
+                            <div className="grid grid-cols-2 gap-4">
+                                {snapshot.vitals.heartRate && (
+                                    <div>
+                                        <span className="text-xs text-blue-500 font-bold uppercase">Heart Rate</span>
+                                        <p className="text-2xl font-mono text-slate-900 font-bold flex items-baseline gap-1">
+                                            {snapshot.vitals.heartRate} <span className="text-sm text-slate-400 font-sans font-normal">bpm</span>
+                                        </p>
+                                    </div>
+                                )}
+                                {snapshot.vitals.spo2 && (
+                                    <div>
+                                        <span className="text-xs text-blue-500 font-bold uppercase">SpO₂</span>
+                                        <p className="text-2xl font-mono text-slate-900 font-bold flex items-baseline gap-1">
+                                            {snapshot.vitals.spo2} <span className="text-sm text-slate-400 font-sans font-normal">%</span>
+                                        </p>
+                                    </div>
+                                )}
+                                {snapshot.vitals.bp && (
+                                    <div>
+                                        <span className="text-xs text-blue-500 font-bold uppercase">Blood Pressure</span>
+                                        <p className="text-xl font-mono text-slate-900 font-bold flex items-baseline gap-1">
+                                            {snapshot.vitals.bp} <span className="text-sm text-slate-400 font-sans font-normal">mmHg</span>
+                                        </p>
+                                    </div>
+                                )}
+                                {snapshot.vitals.recordedAt && (
+                                    <div className="col-span-2 mt-2 pt-2 border-t border-blue-100">
+                                        <p className="text-[10px] text-blue-400 font-medium">
+                                            Recorded: {new Date(snapshot.vitals.recordedAt).toLocaleString()}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 {/* 2.5 Women's Health (Conditional) */}
                 {snapshot.womensHealth && (snapshot.womensHealth.isPregnant || (snapshot.womensHealth.conditions && snapshot.womensHealth.conditions.length > 0)) && (

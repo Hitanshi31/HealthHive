@@ -2,6 +2,7 @@
 import mongoose from 'mongoose';
 import { IUser } from '../models/User';
 import { IMedicalRecord } from '../models/MedicalRecord';
+import { IVital } from '../models/Vital';
 import { RiskEngineService } from './risk.engine';
 import { FHIRAdapterService } from './fhir.adapter';
 import EmergencySnapshot, { IEmergencySnapshot } from '../models/EmergencySnapshot';
@@ -12,7 +13,8 @@ export class SnapshotBuilder {
         bloodGroup: 'Unknown',
         majorAllergies: [] as string[],
         chronicConditions: [] as string[],
-        currentMedications: [] as string[]
+        currentMedications: [] as string[],
+        emergencyContact: undefined as { name: string, phone: string, relation?: string } | undefined
     };
     private riskFlags: any[] = [];
     private recentReports: any[] = [];
@@ -37,6 +39,14 @@ export class SnapshotBuilder {
             if (user.healthBasics.currentMedications) {
                 this.criticalSummary.currentMedications = user.healthBasics.currentMedications.split(',').map(s => s.trim()).filter(Boolean);
             }
+        }
+
+        // Populate Emergency Contact
+        if (user.emergencyContact) {
+            this.criticalSummary.emergencyContact = {
+                name: user.emergencyContact.name,
+                phone: user.emergencyContact.phone
+            };
         }
 
         // Populate Women's Health if shared
@@ -70,6 +80,27 @@ export class SnapshotBuilder {
         const vitalRecord = records.find(r => r.type === 'VITALS');
         if (vitalRecord && vitalRecord.aiExtractedFields) {
             this.vitals = vitalRecord.aiExtractedFields;
+            return this;
+        }
+
+        return this;
+    }
+
+    addVitals(vitalsDocs: IVital[]): this {
+        // Find latest of each type
+        const latestHR = vitalsDocs.filter(v => v.type === 'HR').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+        const latestSPO2 = vitalsDocs.filter(v => v.type === 'SPO2').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+        const latestBP = vitalsDocs.filter(v => v.type === 'BP').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+
+        if (latestHR) {
+            this.vitals.heartRate = Number(latestHR.value); // Ensure number
+            this.vitals.recordedAt = latestHR.timestamp;
+        }
+        if (latestSPO2) {
+            this.vitals.spo2 = Number(latestSPO2.value);
+        }
+        if (latestBP) {
+            this.vitals.bp = String(latestBP.value);
         }
 
         return this;

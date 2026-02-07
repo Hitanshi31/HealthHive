@@ -2,6 +2,7 @@
 import crypto from 'crypto';
 import User from '../models/User';
 import MedicalRecord from '../models/MedicalRecord';
+import Vital from '../models/Vital';
 import EmergencySnapshot from '../models/EmergencySnapshot';
 import { SnapshotBuilder } from './snapshot.builder';
 
@@ -16,6 +17,7 @@ export class EmergencyService {
         if (!user) throw new Error('User not found');
 
         const records = await MedicalRecord.find({ patientId: userId });
+        const vitals = await Vital.find({ patientId: userId }).sort({ timestamp: -1 }).limit(50); // Fetch recent vitals
 
         // 1. Generate secure random token
         const token = crypto.randomBytes(32).toString('hex');
@@ -28,6 +30,7 @@ export class EmergencyService {
         const snapshot = await builder
             .setPatient(user)
             .addMedicalRecords(records)
+            .addVitals(vitals)
             .calculateRisks()
             .setSecurity(tokenHash, 1) // 1 Hour expiry
             .build();

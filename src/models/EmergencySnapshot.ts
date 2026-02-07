@@ -12,6 +12,11 @@ export interface IEmergencySnapshot extends Document {
         majorAllergies: string[];
         chronicConditions: string[];
         currentMedications: string[];
+        emergencyContact?: {
+            name: string;
+            phone: string;
+            relation?: string;
+        };
     };
 
     // Risk Analysis
@@ -33,6 +38,7 @@ export interface IEmergencySnapshot extends Document {
     vitals?: {
         bp?: string;
         heartRate?: number;
+        spo2?: number;
         temp?: number;
         recordedAt?: Date;
     };
@@ -54,7 +60,12 @@ const EmergencySnapshotSchema: Schema = new Schema({
         bloodGroup: { type: String, default: 'Unknown' },
         majorAllergies: [String],
         chronicConditions: [String],
-        currentMedications: [String]
+        currentMedications: [String],
+        emergencyContact: {
+            name: String,
+            phone: String,
+            relation: String
+        }
     },
 
     riskFlags: [{
@@ -74,6 +85,7 @@ const EmergencySnapshotSchema: Schema = new Schema({
     vitals: {
         bp: String,
         heartRate: Number,
+        spo2: Number,
         temp: Number,
         recordedAt: Date
     },

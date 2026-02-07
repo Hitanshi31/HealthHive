@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { scanForDevices, connectToDevice, startNotifications } from '../services/ble.service';
 import { saveVital, getVitals } from '../services/vitals.service';
-import { Activity, Bluetooth, RefreshCw, Thermometer, Droplets, Heart, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Activity, Bluetooth, RefreshCw, Thermometer, Droplets, Heart, AlertCircle, CheckCircle2, Moon } from 'lucide-react';
 
 interface VitalCardProps {
     title: string;
@@ -72,12 +72,13 @@ const VitalsDashboard: React.FC<VitalsDashboardProps> = ({ patientId, subjectPro
 
 
     // Mock current values for display if no real device
+    // Mock current values for display if no real device
     const [currentReadings, setCurrentReadings] = useState<any>({
         HR: { val: 72, history: [68, 70, 72, 71, 75, 72] },
-        BP: { val: '120/80', history: [118, 119, 121, 120, 122, 120] }, // History of systolic
         SPO2: { val: 98, history: [97, 98, 99, 98, 98, 98] },
-        TEMP: { val: 36.6, history: [36.5, 36.6, 36.7, 36.6, 36.5, 36.6] },
-        GLUCOSE: { val: 105, history: [98, 102, 110, 108, 105, 105] }
+        HRV: { val: 45, history: [42, 44, 45, 43, 46, 45] },
+        SKIN_TEMP: { val: '+0.2', history: [0, 0.1, 0.2, 0.1, 0.3, 0.2] },
+        SLEEP: { val: 7.5, history: [6.5, 7.0, 6.8, 7.2, 8.0, 7.5] }
     });
 
     useEffect(() => {
@@ -200,27 +201,18 @@ const VitalsDashboard: React.FC<VitalsDashboardProps> = ({ patientId, subjectPro
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <VitalCard
-                    title="Blood Pressure"
-                    value={currentReadings.BP.val}
-                    unit="mmHg"
-                    status="NORMAL"
-                    icon={<Activity size={24} className="text-rose-500" />}
-                    color="bg-rose-500 text-rose-500"
-                    history={currentReadings.BP.history}
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
                 <VitalCard
                     title="Heart Rate"
                     value={currentReadings.HR.val}
                     unit="bpm"
-                    status="ELEVATED"
+                    status="NORMAL"
                     icon={<Heart size={24} className="text-red-500" />}
                     color="bg-red-500 text-red-500"
                     history={currentReadings.HR.history}
                 />
                 <VitalCard
-                    title="SpO2 Saturation"
+                    title="SpO₂ Saturation"
                     value={currentReadings.SPO2.val}
                     unit="%"
                     status="NORMAL"
@@ -229,22 +221,31 @@ const VitalsDashboard: React.FC<VitalsDashboardProps> = ({ patientId, subjectPro
                     history={currentReadings.SPO2.history}
                 />
                 <VitalCard
-                    title="Body Temperature"
-                    value={currentReadings.TEMP.val}
+                    title="Heart Rate Variability"
+                    value={currentReadings.HRV.val}
+                    unit="ms"
+                    status="NORMAL"
+                    icon={<Activity size={24} className="text-purple-500" />}
+                    color="bg-purple-500 text-purple-500"
+                    history={currentReadings.HRV.history}
+                />
+                <VitalCard
+                    title="Skin Temp Deviation"
+                    value={currentReadings.SKIN_TEMP.val}
                     unit="°C"
                     status="NORMAL"
                     icon={<Thermometer size={24} className="text-amber-500" />}
                     color="bg-amber-500 text-amber-500"
-                    history={currentReadings.TEMP.history}
+                    history={currentReadings.SKIN_TEMP.history}
                 />
                 <VitalCard
-                    title="Glucose Level"
-                    value={currentReadings.GLUCOSE.val}
-                    unit="mg/dL"
-                    status="CRITICAL"
-                    icon={<Activity size={24} className="text-purple-500" />}
-                    color="bg-purple-500 text-purple-500"
-                    history={currentReadings.GLUCOSE.history}
+                    title="Sleep Duration"
+                    value={currentReadings.SLEEP.val}
+                    unit="hrs"
+                    status="NORMAL"
+                    icon={<Moon size={24} className="text-indigo-500" />}
+                    color="bg-indigo-500 text-indigo-500"
+                    history={currentReadings.SLEEP.history}
                 />
             </div>
 
