@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Calendar, Baby, Lock, ChevronRight, Droplets, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { Calendar, Baby, Lock, ChevronRight, Droplets, ArrowLeft, ShieldAlert, FileText, Upload } from 'lucide-react';
 import api from '../services/api';
+import Button from './ui/Button';
+import Badge from './ui/Badge';
 
 interface WomensHealthProps {
     userData: any;
@@ -37,6 +39,47 @@ const WomensHealthMemory: React.FC<WomensHealthProps> = ({ userData, onClose }) 
         notes: ''
     });
 
+    // Pregnancy Reports State
+    const [pregnancyReports, setPregnancyReports] = useState<any[]>([]);
+    const [uploading, setUploading] = useState(false);
+
+    React.useEffect(() => {
+        if (view === 'PREGNANCY') {
+            fetchPregnancyReports();
+        }
+    }, [view]);
+
+    const fetchPregnancyReports = async () => {
+        try {
+            const res = await api.get('/records?type=PREGNANCY_REPORT');
+            setPregnancyReports(res.data);
+        } catch (e) {
+            console.error("Failed to fetch reports", e);
+        }
+    };
+
+    const handleReportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        setUploading(true);
+        const file = e.target.files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('type', 'PREGNANCY_REPORT');
+        formData.append('subjectProfileId', userData.subjectProfileId || '');
+
+        try {
+            await api.post('/records', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            await fetchPregnancyReports();
+        } catch (err) {
+            console.error("Upload failed", err);
+            alert("Failed to upload report.");
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handleSaveAPI = async (payload: any) => {
         setLoading(true);
         try {
@@ -52,9 +95,12 @@ const WomensHealthMemory: React.FC<WomensHealthProps> = ({ userData, onClose }) 
 
     const renderHome = () => (
         <div className="space-y-6 animate-fade-in">
-            <header className="mb-8">
-                <h2 className="text-2xl font-bold text-slate-800">Women's Health Timeline</h2>
-                <p className="text-slate-500 text-sm">Private reproductive health memory.</p>
+            <header className="mb-8 flex items-start justify-between">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800">Women's Health Vault</h2>
+                    <p className="text-slate-500 text-sm mt-1">Private reproductive health memory.</p>
+                </div>
+                <Badge variant="neutral" icon={<Lock size={10} />}>Private & Local</Badge>
             </header>
 
             <div className="grid gap-4">
@@ -149,7 +195,7 @@ const WomensHealthMemory: React.FC<WomensHealthProps> = ({ userData, onClose }) 
                     ></textarea>
                 </div>
 
-                <button
+                <Button
                     onClick={async () => {
                         const newEntry = { ...periodForm, startDate: new Date(periodForm.startDate), endDate: periodForm.endDate ? new Date(periodForm.endDate) : undefined };
                         const updatedLog = [newEntry, ...periodLog];
@@ -158,10 +204,11 @@ const WomensHealthMemory: React.FC<WomensHealthProps> = ({ userData, onClose }) 
                         alert("Period entry saved.");
                     }}
                     disabled={!periodForm.startDate || loading}
-                    className="w-full py-4 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl shadow-lg shadow-rose-200 transition-all disabled:opacity-50"
+                    fullWidth
+                    className="mt-4 bg-rose-500 hover:bg-rose-600 border-transparent shadow-rose-200 text-white"
                 >
                     {loading ? 'Saving...' : 'Save Entry'}
-                </button>
+                </Button>
 
                 <p className="text-center text-xs text-slate-400 mt-4">
                     Stored as memory only. No predictions.
@@ -234,7 +281,7 @@ const WomensHealthMemory: React.FC<WomensHealthProps> = ({ userData, onClose }) 
                     </button>
                 </div>
 
-                <button
+                <Button
                     onClick={async () => {
                         await handleSaveAPI({
                             isPregnant,
@@ -246,12 +293,65 @@ const WomensHealthMemory: React.FC<WomensHealthProps> = ({ userData, onClose }) 
                         alert("Pregnancy details saved.");
                     }}
                     disabled={loading}
-                    className="w-full mt-6 py-4 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-lg shadow-purple-200 transition-all"
+                    fullWidth
+                    className="mt-6 bg-purple-600 hover:bg-purple-700 shadow-purple-200 text-white border-transparent"
                 >
                     {loading ? 'Saving...' : 'Save Changes'}
-                </button>
+                </Button>
+
+
+                {/* PREGNANCY REPORTS SECTION */}
+                <div className="mt-8 border-t border-purple-100 pt-6">
+                    <h3 className="font-bold text-lg text-purple-900 mb-4 flex items-center gap-2">
+                        <FileText size={20} /> Pregnancy Reports
+                    </h3>
+
+                    <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 border-dashed text-center">
+                        <input
+                            type="file"
+                            id="pregReportUpload"
+                            className="hidden"
+                            accept="application/pdf,image/*"
+                            onChange={handleReportUpload}
+                        />
+                        <label htmlFor="pregReportUpload" className="cursor-pointer block">
+                            <div className="mx-auto w-12 h-12 bg-white rounded-full flex items-center justify-center text-purple-600 mb-2 shadow-sm">
+                                <Upload size={20} />
+                            </div>
+                            <span className="text-sm font-bold text-purple-700 block">Upload Report</span>
+                            <span className="text-xs text-slate-400">PDF or Images (Max 5MB)</span>
+                        </label>
+                        {uploading && <p className="text-xs text-purple-600 mt-2 font-bold animate-pulse">Uploading...</p>}
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                        {pregnancyReports.length === 0 && (
+                            <p className="text-center text-xs text-slate-400 italic py-2">No reports uploaded yet.</p>
+                        )}
+                        {pregnancyReports.map((report: any) => (
+                            <div key={report._id} className="bg-white p-3 rounded-lg border border-purple-100 flex items-center justify-between shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
+                                        <FileText size={16} />
+                                    </div>
+                                    <div>
+                                        <a href={`http://localhost:3000/uploads/${report.filePath ? report.filePath.split(/[\\/]/).pop() : ''}`} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-slate-700 hover:text-purple-700 hover:underline block">
+                                            {report.type === 'PREGNANCY_REPORT' ? 'Pregnancy Report' : report.type}
+                                        </a>
+                                        <span className="text-[10px] text-slate-400">
+                                            {new Date(report.createdAt).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                </div>
+                                <span className="text-[10px] uppercase font-bold text-green-600 bg-green-50 px-2 py-1 rounded">
+                                    Uploaded
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
-        </div>
+        </div >
     );
 
 
@@ -301,16 +401,17 @@ const WomensHealthMemory: React.FC<WomensHealthProps> = ({ userData, onClose }) 
                     Data is stored encrypted. Toggle these settings anytime to revoke access instantly.
                 </div>
 
-                <button
+                <Button
                     onClick={async () => {
                         await handleSaveAPI({ privacy });
                         alert("Privacy settings updated.");
                     }}
                     disabled={loading}
-                    className="w-full mt-6 py-4 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-lg transition-all"
+                    fullWidth
+                    className="mt-6 bg-slate-800 hover:bg-slate-900 border-transparent text-white"
                 >
                     {loading ? 'Updating...' : 'Save Settings'}
-                </button>
+                </Button>
             </div>
         </div>
     );

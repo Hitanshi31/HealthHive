@@ -1,4 +1,4 @@
-import { FileText, Clock, Users, Activity, User, LogOut, Droplets } from 'lucide-react';
+import { FileText, Timer, Users, Activity, User, LogOut, Droplets } from 'lucide-react';
 
 interface SidebarProps {
     activeTab: string;
@@ -11,7 +11,7 @@ const DashboardSidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onL
 
     const navItems = [
         { id: 'records', label: 'My Records', icon: <FileText size={20} /> },
-        { id: 'timeline', label: 'Health Timeline', icon: <Clock size={20} /> },
+        { id: 'timeline', label: 'Health Timeline', icon: <Timer size={20} /> },
         { id: 'vitals', label: 'Vitals & Devices', icon: <Activity size={20} /> },
         { id: 'consent', label: 'Data Access', icon: <Users size={20} /> },
         { id: 'profile', label: 'My Profile', icon: <User size={20} /> },
@@ -32,8 +32,8 @@ const DashboardSidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onL
                         <button
                             key={item.id}
                             onClick={() => setActiveTab(item.id)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === item.id
-                                ? 'bg-blue-50 text-blue-600 shadow-sm'
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${activeTab === item.id
+                                ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
                                 : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
                                 }`}
                         >

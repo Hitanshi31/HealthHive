@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
-import { FileText, Calendar, Activity, Lock, ArrowRight, ShieldCheck, Users, X, Clock, Pill, ChevronLeft } from 'lucide-react';
+import { FileText, Calendar, Activity, Lock, ArrowRight, ShieldCheck, Users, X, Pill, ChevronLeft } from 'lucide-react';
 import PrescriptionForm from '../components/PrescriptionForm';
 import OngoingMedicines from '../components/OngoingMedicines';
 import DoctorSidebar from '../components/DoctorSidebar';

@@ -43,7 +43,9 @@ const Navbar = ({ role, profiles, currentProfile, onSelectProfile, onAddFamilyMe
                             </div>
                             <div>
                                 <span className="font-bold text-xl text-slate-800 tracking-tight block leading-none">HealthHive</span>
-                                <span className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Secure Health</span>
+                                <span className="text-[10px] text-blue-600 font-bold uppercase tracking-widest flex items-center gap-1">
+                                    <Shield size={10} className="text-blue-500" /> Secure Health
+                                </span>
                             </div>
                         </div>
 

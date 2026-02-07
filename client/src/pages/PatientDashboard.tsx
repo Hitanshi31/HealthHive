@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import axios from 'axios';
 import Navbar from '../components/Navbar';
-import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Clock } from 'lucide-react';
+import { Shield, FileText, Activity, Users, AlertTriangle, QrCode as QrIcon, ClipboardCheck, Trash2, CheckCircle2, AlertCircle, Plus, ChevronRight, Timer } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import HealthBasicsModal from '../components/HealthBasicsModal';
 import PatientTimeline from '../components/PatientTimeline';
@@ -13,7 +13,11 @@ import { listDependents, deleteDependent } from '../services/dependentService';
 import WomensHealthMemory from '../components/WomensHealthMemory';
 import VitalsDashboard from '../components/VitalsDashboard';
 import ProfileDashboard from '../components/ProfileDashboard';
+import EmergencySnapshotDisplay from '../components/EmergencySnapshotDisplay';
 import DashboardSidebar from '../components/DashboardSidebar';
+import Button from '../components/ui/Button';
+import Badge from '../components/ui/Badge';
+import Card from '../components/ui/Card';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -34,6 +38,9 @@ const PatientDashboard: React.FC = () => {
     const [newDoctorId, setNewDoctorId] = useState('');
     const [qrToken, setQrToken] = useState<string | null>(null);
     const [qrExpires, setQrExpires] = useState<string | null>(null);
+    const [offlineSnapshot, setOfflineSnapshot] = useState<any>(null);
+    const [showOfflineSnapshot, setShowOfflineSnapshot] = useState(false);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine);
     const [loading, setLoading] = useState(false);
     const [showBasicsModal, setShowBasicsModal] = useState(false);
 
@@ -110,12 +117,58 @@ const PatientDashboard: React.FC = () => {
             const res = await api.post('/emergency/generate', {
                 subjectProfileId: selectedProfile.id
             });
-            setQrToken(res.data.token);
-            setQrExpires(res.data.expiresAt);
+            const { token, expiresAt } = res.data;
+            setQrToken(token);
+            setQrExpires(expiresAt);
+
+            // Cache for offline usage
+            try {
+                // We use the token to fetch the full snapshot content immediately
+                // This ensures we have the data locally
+                const snapshotRes = await api.get(`/emergency/view/${token}`);
+                const snapshotData = snapshotRes.data;
+                const cacheData = { token, expiresAt, snapshot: snapshotData };
+
+                localStorage.setItem('offlineEmergencyData', JSON.stringify(cacheData));
+                setOfflineSnapshot(cacheData);
+            } catch (err) {
+                console.error("Failed to cache snapshot for offline use", err);
+            }
+
         } catch (e) {
             console.error("Failed to generate QR", e);
         }
     };
+
+    // Offline & Cache Management
+    useEffect(() => {
+        const checkOnlineStatus = () => setIsOffline(!navigator.onLine);
+        window.addEventListener('online', checkOnlineStatus);
+        window.addEventListener('offline', checkOnlineStatus);
+
+        // Load cached snapshot if valid
+        const cached = localStorage.getItem('offlineEmergencyData');
+        if (cached) {
+            try {
+                const parsed = JSON.parse(cached);
+                if (new Date(parsed.expiresAt) > new Date()) {
+                    setOfflineSnapshot(parsed);
+                    // Also restore QR if valid and we don't have one 
+                    if (!qrToken) {
+                        setQrToken(parsed.token);
+                        setQrExpires(parsed.expiresAt);
+                    }
+                } else {
+                    localStorage.removeItem('offlineEmergencyData');
+                }
+            } catch (e) { localStorage.removeItem('offlineEmergencyData'); }
+        }
+
+        return () => {
+            window.removeEventListener('online', checkOnlineStatus);
+            window.removeEventListener('offline', checkOnlineStatus);
+        };
+    }, []);
 
     useEffect(() => {
         fetchRecords();
@@ -427,13 +480,9 @@ const PatientDashboard: React.FC = () => {
                                             <div key={r.id || r._id} className="group bg-white rounded-xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-300 relative overflow-hidden">
                                                 {/* Trust Badge */}
                                                 <div className="absolute top-0 right-0 p-4">
-                                                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border flex items-center gap-1.5
-                                                ${r.trustIndicator === 'GREEN' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                            r.trustIndicator === 'YELLOW' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                                                'bg-red-50 text-red-700 border-red-200'}`}>
-                                                        {r.trustIndicator === 'GREEN' ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
+                                                    <Badge variant={r.trustIndicator === 'GREEN' ? 'success' : r.trustIndicator === 'YELLOW' ? 'warning' : 'danger'} icon={r.trustIndicator === 'GREEN' ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}>
                                                         {r.trustIndicator === 'GREEN' ? 'Verified' : r.trustIndicator === 'YELLOW' ? 'Old Data' : 'Incomplete'}
-                                                    </span>
+                                                    </Badge>
                                                 </div>
 
                                                 <div className="flex items-start gap-4">
@@ -452,7 +501,7 @@ const PatientDashboard: React.FC = () => {
                                                             </a>
                                                         </h3>
                                                         <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                                                            <span className="flex items-center gap-1"><Clock size={12} /> {new Date(r.createdAt).toLocaleDateString()}</span>
+                                                            <span className="flex items-center gap-1"><Timer size={12} /> {new Date(r.createdAt).toLocaleDateString()}</span>
                                                             <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
                                                             <span>{r.source || 'Uploaded by Patient'}</span>
                                                         </div>
@@ -532,13 +581,15 @@ const PatientDashboard: React.FC = () => {
                                             <h3 className="font-bold text-white mb-1 text-lg">Add New Record</h3>
                                             <p className="text-sm text-blue-100 mb-6">Securely upload lab reports or prescriptions.</p>
 
-                                            <button
+                                            <Button
+                                                variant="secondary"
+                                                fullWidth
                                                 onClick={handleUploadClick}
                                                 disabled={loading}
-                                                className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-white hover:bg-blue-50 text-blue-700 rounded-xl font-bold transition-all shadow-md disabled:opacity-70 group-hover:shadow-xl"
+                                                className="shadow-lg border-transparent text-blue-700 hover:text-blue-800"
                                             >
-                                                {loading ? <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin"></div> Uploading...</span> : <><Plus size={20} /> Upload File</>}
-                                            </button>
+                                                {loading ? 'Uploading...' : <><Plus size={20} /> Upload File</>}
+                                            </Button>
                                             <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept=".pdf,.jpg,.jpeg,.png" />
                                             <p className="text-[10px] text-center text-blue-200/80 mt-3 font-medium">Supports PDF, JPG, PNG (Max 10MB)</p>
                                         </div>
@@ -583,27 +634,29 @@ const PatientDashboard: React.FC = () => {
                                 <div className="grid md:grid-cols-3 gap-8">
                                     {/* Grant Form */}
                                     <div className="md:col-span-1">
-                                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full relative overflow-hidden">
-                                            <div className="absolute top-0 left-0 w-full h-1 bg-green-500"></div>
+                                        <Card className="h-full relative overflow-hidden border-orange-100">
+                                            <div className="absolute top-0 left-0 w-full h-1 bg-orange-500"></div>
                                             <h3 className="font-bold text-slate-900 text-lg mb-2">Grant Access</h3>
                                             <p className="text-sm text-slate-500 mb-6">Allow a doctor to view your records.</p>
                                             <div className="space-y-4">
                                                 <div>
                                                     <label className="text-xs font-bold text-slate-700 uppercase mb-1 block">Doctor ID</label>
-                                                    <input type="text" placeholder="DOC-123456" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono" value={newDoctorId} onChange={(e) => setNewDoctorId(e.target.value)} />
+                                                    <input type="text" placeholder="DOC-123456" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono focus:ring-2 focus:ring-orange-200 transition-all" value={newDoctorId} onChange={(e) => setNewDoctorId(e.target.value)} />
                                                 </div>
                                                 <div className="mb-4">
                                                     <label className="text-xs font-bold text-slate-700 uppercase mb-1 block">Duration</label>
-                                                    <select value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none font-medium text-slate-700">
+                                                    <select value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg outline-none font-medium text-slate-700 focus:ring-2 focus:ring-orange-200 transition-all">
                                                         <option value="15m">15 Minutes</option>
                                                         <option value="1h">1 Hour</option>
                                                         <option value="24h">24 Hours</option>
                                                         <option value="7d">7 Days</option>
                                                     </select>
                                                 </div>
-                                                <button onClick={handleGrantConsent} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-sm">Grant Access</button>
+                                                <Button onClick={handleGrantConsent} fullWidth className="bg-orange-600 hover:bg-orange-700 text-white shadow-orange-200">
+                                                    Grant Access
+                                                </Button>
                                             </div>
-                                        </div>
+                                        </Card>
                                     </div>
                                     {/* Active Consents */}
                                     <div className="md:col-span-2 space-y-8">
@@ -628,16 +681,18 @@ const PatientDashboard: React.FC = () => {
                                                             <div>
                                                                 <p className="font-bold text-slate-900">Doctor ID: <span className="font-mono text-slate-600">{c.doctor?.doctorCode || c.doctorId}</span></p>
                                                                 <p className="text-green-700 text-xs font-bold flex items-center gap-1 mt-1">
-                                                                    <Clock size={12} /> Expires: {new Date(c.validUntil).toLocaleString()}
+                                                                    <Timer size={12} /> Expires: {new Date(c.validUntil).toLocaleString()}
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        <button
+                                                        <Button
+                                                            variant="danger"
+                                                            size="sm"
                                                             onClick={() => handleRevoke(c.id)}
-                                                            className="px-4 py-2 border border-red-200 text-red-600 text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-red-50 transition-colors w-full sm:w-auto"
+                                                            className="w-full sm:w-auto"
                                                         >
                                                             Revoke Access
-                                                        </button>
+                                                        </Button>
                                                     </div>
                                                 ))}
                                             </div>
@@ -647,7 +702,7 @@ const PatientDashboard: React.FC = () => {
                                         <div>
                                             <div className="flex items-center justify-between pb-2 border-b border-slate-200 mb-4 mt-8">
                                                 <h3 className="font-bold text-slate-500 text-lg flex items-center gap-2">
-                                                    <Clock size={20} /> Expired Grant Records
+                                                    <Timer size={20} /> Expired Grant Records
                                                 </h3>
                                             </div>
                                             {consents.filter(c => c.status !== 'ACTIVE' || new Date(c.validUntil) <= new Date()).length === 0 && (
@@ -682,21 +737,36 @@ const PatientDashboard: React.FC = () => {
                         {/* 5. EMERGENCY */}
                         {activeTab === 'emergency' && (
                             <div className="max-w-2xl mx-auto py-8">
-                                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
-                                    <div className="bg-red-600 p-8 text-center text-white">
-                                        <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm"><Activity size={32} /></div>
-                                        <h2 className="text-3xl font-bold tracking-tight">Emergency Access</h2>
-                                        <p className="text-red-100 mt-2">Use this QR code to provide paramedics with immediate, read-only access to your critical health data.</p>
+                                <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 ring-4 ring-red-50">
+                                    <div className="bg-red-700 p-8 text-center text-white relative">
+                                        <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm shadow-inner text-white">
+                                            <Activity size={32} strokeWidth={3} />
+                                        </div>
+                                        <h2 className="text-3xl font-black tracking-tight mb-2">Emergency Access</h2>
+                                        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-red-800/40 rounded-full text-red-50 text-xs font-bold uppercase tracking-wider backdrop-blur-md border border-red-500/30">
+                                            <Shield size={12} /> Read-only • Auto-expiring • Offline-ready
+                                        </div>
+                                        <p className="text-red-100 mt-4 text-sm font-medium max-w-md mx-auto leading-relaxed opacity-90">
+                                            Use this QR code to provide paramedics with immediate, read-only access to critical health data.
+                                        </p>
                                     </div>
                                     <div className="p-10 flex flex-col items-center">
-                                        <div className="bg-white p-4 rounded-2xl shadow-inner border-4 border-slate-100 flex flex-col items-center">
+                                        <div className="bg-white p-4 rounded-2xl shadow-inner border-4 border-slate-100 flex flex-col items-center relative">
+                                            {/* Corner Accents for QR */}
+                                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-slate-900 rounded-tl-xl -translate-x-2 -translate-y-2"></div>
+                                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-slate-900 rounded-tr-xl translate-x-2 -translate-y-2"></div>
+                                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-slate-900 rounded-bl-xl -translate-x-2 translate-y-2"></div>
+                                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-slate-900 rounded-br-xl translate-x-2 translate-y-2"></div>
                                             {qrToken ? (
                                                 <>
-                                                    <QRCodeCanvas value={`${window.location.origin}/emergency/view/${qrToken}`} size={200} />
+                                                    <QRCodeCanvas value={`${window.location.origin}/emergency/view/${qrToken}`} size={220} level={'H'} />
                                                     {qrExpires && (
-                                                        <p className="text-[10px] text-red-500 font-bold mt-2 uppercase tracking-wide">
-                                                            Expires: {new Date(qrExpires).toLocaleTimeString()}
-                                                        </p>
+                                                        <div className="mt-4 flex flex-col items-center">
+                                                            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-1">Expires In</div>
+                                                            <div className="text-lg font-mono font-bold text-red-600">
+                                                                {new Date(qrExpires).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </div>
+                                                        </div>
                                                     )}
                                                 </>
                                             ) : (
@@ -706,40 +776,78 @@ const PatientDashboard: React.FC = () => {
                                             )}
                                         </div>
 
-                                        <div className="mt-8 text-center space-y-4 w-full">
-                                            <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                                <Shield size={12} /> Secure • Logged • Time-Limited
-                                            </div>
-
+                                        <div className="mt-10 w-full max-w-sm space-y-4">
                                             {qrToken && (
-                                                <div className="w-full max-w-sm mx-auto space-y-3">
+                                                <>
+                                                    <Button
+                                                        variant="outline"
+                                                        fullWidth
+                                                        onClick={() => window.open(`${window.location.origin}/emergency/view/${qrToken}`, '_blank')}
+                                                        className="h-12 border-slate-300 text-slate-700 hover:border-slate-800 hover:text-slate-900"
+                                                    >
+                                                        Preview Snapshot Content
+                                                    </Button>
+
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        fullWidth
+                                                        onClick={generateEmergencyQR}
+                                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                        disabled={isOffline}
+                                                    >
+                                                        {isOffline ? 'Offline - Cannot Regenerate' : 'Regenerate New Token'}
+                                                    </Button>
+
                                                     <a
                                                         href={`${window.location.origin}/emergency/view/${qrToken}`}
                                                         target="_blank"
                                                         rel="noreferrer"
-                                                        className="block w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 transform hover:scale-105"
+                                                        className="block w-full py-4 bg-slate-900 hover:bg-black text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 transform hover:scale-[1.02] active:scale-[0.98]"
                                                     >
-                                                        <ChevronRight size={18} /> Simulate Scan (Doctor View)
+                                                        <ChevronRight size={18} /> Simulate Paramedic Scan
                                                     </a>
+                                                </>
+                                            )}
 
-                                                    <button
-                                                        onClick={() => window.open(`${window.location.origin}/emergency/view/${qrToken}`, '_blank')}
-                                                        className="block w-full py-3 bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl transition-all"
+                                            {/* Offline View Button */}
+                                            {offlineSnapshot && offlineSnapshot.snapshot && (
+                                                <div className="pt-4 border-t border-slate-200 mt-4">
+                                                    <Button
+                                                        variant="secondary"
+                                                        fullWidth
+                                                        onClick={() => setShowOfflineSnapshot(true)}
+                                                        className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
                                                     >
-                                                        Preview Snapshot
-                                                    </button>
-
-                                                    <button
-                                                        onClick={generateEmergencyQR}
-                                                        className="text-sm font-bold text-red-600 hover:text-red-700 underline block w-full text-center"
-                                                    >
-                                                        Regenerate New Token
-                                                    </button>
+                                                        {isOffline ? 'You are offline. View Saved Snapshot' : 'View Offline Snapshot Copy'}
+                                                    </Button>
+                                                    <p className="text-[10px] text-center text-slate-400 mt-2">
+                                                        Last Synced: {new Date(offlineSnapshot.snapshot.createdAt).toLocaleString()}
+                                                    </p>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Offline Snapshot Modal Overlay */}
+                        {showOfflineSnapshot && offlineSnapshot && (
+                            <div className="fixed inset-0 z-[100] bg-white overflow-y-auto animate-fade-in text-left">
+                                <div className="sticky top-0 z-[101] flex items-center justify-between p-4 bg-slate-900 text-white shadow-md">
+                                    <h2 className="font-bold flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                        Offline Backup Mode
+                                    </h2>
+                                    <button
+                                        onClick={() => setShowOfflineSnapshot(false)}
+                                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-bold transition-colors"
+                                    >
+                                        Close Viewer
+                                    </button>
+                                </div>
+                                <EmergencySnapshotDisplay snapshot={offlineSnapshot.snapshot} />
                             </div>
                         )}
 

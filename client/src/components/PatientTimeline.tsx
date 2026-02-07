@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Timer, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface Record {
     _id: string;
@@ -27,7 +27,7 @@ const PatientTimeline: React.FC<PatientTimelineProps> = ({ records }) => {
     if (sortedRecords.length === 0) {
         return (
             <div className="text-center py-10 text-slate-400">
-                <Clock size={32} className="mx-auto mb-2 opacity-50" />
+                <Timer size={32} className="mx-auto mb-2 opacity-50" />
                 <p>No history yet.</p>
             </div>
         );
@@ -36,7 +36,7 @@ const PatientTimeline: React.FC<PatientTimelineProps> = ({ records }) => {
     return (
         <div className="max-w-3xl mx-auto py-4">
             <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-                <Clock className="text-blue-600" size={20} /> Medical History
+                <Timer className="text-blue-600" size={20} /> Medical History
             </h3>
 
             <div className="relative border-l-2 border-slate-200 ml-3 space-y-8 pb-4">
