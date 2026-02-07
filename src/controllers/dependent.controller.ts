@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import User from '../models/User';
+import Consent from '../models/Consent';
 import { randomUUID } from 'crypto';
 
 interface AuthRequest extends Request {
@@ -133,6 +134,13 @@ export const deleteDependent = async (req: AuthRequest, res: Response): Promise<
 
         await user.save();
         console.log('[DELETE] Successfully removed dependent');
+
+        // Clean up associated consents
+        await Consent.updateMany(
+            { subjectProfileId: id, status: 'ACTIVE' },
+            { status: 'REVOKED' }
+        );
+        console.log(`[DELETE] Revoked consents for dependent ${id}`);
 
         res.json({ message: 'Dependent deleted successfully' });
     } catch (error) {

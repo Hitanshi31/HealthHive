@@ -176,8 +176,8 @@ const DoctorPatientProfile: React.FC<DoctorPatientProfileProps> = ({ patientId, 
                                 </div>
                             </div>
 
-                            {/* 3. Women's Health (Conditional) */}
-                            {profile.womensHealth && (
+                            {/* 3. Women's Health (Conditional - Only show if pregnant) */}
+                            {profile.womensHealth && profile.womensHealth.isPregnant && (
                                 <div className="bg-pink-50 p-5 rounded-xl border border-pink-100">
                                     <h3 className="text-sm font-bold text-pink-600 uppercase tracking-wider mb-4 flex items-center gap-2">
                                         <Activity size={14} /> Women's Health
@@ -191,21 +191,15 @@ const DoctorPatientProfile: React.FC<DoctorPatientProfileProps> = ({ patientId, 
                                         <div className="bg-white p-4 rounded-xl border border-pink-100 shadow-sm">
                                             <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Pregnancy Status</label>
                                             <div className="flex items-center gap-2">
-                                                {profile.womensHealth.isPregnant ? (
-                                                    <>
-                                                        <div className="w-3 h-3 rounded-full bg-pink-500 animate-pulse"></div>
-                                                        <span className="font-bold text-pink-600">Pregnant</span>
-                                                        {profile.womensHealth.pregnancyDetails?.weeksPregnant && (
-                                                            <span className="text-sm text-slate-500 font-medium">
-                                                                ({profile.womensHealth.pregnancyDetails.weeksPregnant} weeks)
-                                                            </span>
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    <span className="font-bold text-slate-600">Not Pregnant</span>
+                                                <div className="w-3 h-3 rounded-full bg-pink-500 animate-pulse"></div>
+                                                <span className="font-bold text-pink-600">Pregnant</span>
+                                                {profile.womensHealth.pregnancyDetails?.weeksPregnant && (
+                                                    <span className="text-sm text-slate-500 font-medium">
+                                                        ({profile.womensHealth.pregnancyDetails.weeksPregnant} weeks)
+                                                    </span>
                                                 )}
                                             </div>
-                                            {profile.womensHealth.isPregnant && profile.womensHealth.pregnancyDetails?.dueDate && (
+                                            {profile.womensHealth.pregnancyDetails?.dueDate && (
                                                 <p className="text-xs text-slate-500 mt-2">
                                                     Due Date: <span className="font-bold">{new Date(profile.womensHealth.pregnancyDetails.dueDate).toLocaleDateString()}</span>
                                                 </p>

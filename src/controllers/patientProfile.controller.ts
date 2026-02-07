@@ -15,6 +15,8 @@ export const getProfile = async (req: Request, res: Response) => {
         if (!user) {
             // Try identifying as Dependent
             const parentUser = await User.findOne({ 'dependents.id': patientId });
+            console.log(`Searching for dependent profile with ID: ${patientId}`);
+
             if (parentUser && parentUser.dependents) {
                 const dependent = parentUser.dependents.find(d => d.id === patientId);
                 if (dependent) {

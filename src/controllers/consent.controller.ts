@@ -48,7 +48,7 @@ export const getDoctorPatients = async (req: AuthRequest, res: Response) => {
             doctorId,
             status: 'ACTIVE',
             validUntil: { $gt: now }
-        }).populate('patientId', 'email patientCode'); // Get basic patient details
+        }).populate('patientId', 'email patientCode dependents'); // Get basic patient details + dependents for validation
 
         console.log(`getDoctorPatients: Found ${consents.length} active consents`);
 
@@ -58,6 +58,16 @@ export const getDoctorPatients = async (req: AuthRequest, res: Response) => {
                 console.log(`getDoctorPatients: Warning - Consent ${c._id} has no patientId populated`);
                 return null;
             }
+
+            // FILTER: If this is a dependent consent, verify dependent still exists
+            if (c.subjectProfileId) {
+                const dependentExists = c.patientId.dependents?.some((d: any) => d.id === c.subjectProfileId);
+                if (!dependentExists) {
+                    console.log(`getDoctorPatients: Skipping orphaned consent for missing dependent ${c.subjectProfileId}`);
+                    return null;
+                }
+            }
+
             return {
                 patientId: c.patientId._id,
                 email: c.patientId.email,

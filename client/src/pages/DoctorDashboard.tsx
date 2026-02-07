@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
-import { FileText, Calendar, Activity, Lock, ArrowRight, ShieldCheck, Users, X, Pill, ChevronLeft } from 'lucide-react';
+import { FileText, Calendar, Activity, Lock, ArrowRight, ShieldCheck, Users, X, Pill, ChevronLeft, User } from 'lucide-react';
 import PrescriptionForm from '../components/PrescriptionForm';
 import OngoingMedicines from '../components/OngoingMedicines';
 import DoctorSidebar from '../components/DoctorSidebar';
+import DoctorPatientProfile from '../components/DoctorPatientProfile';
 import { useNavigate } from 'react-router-dom';
 
 const DoctorDashboard: React.FC = () => {
@@ -16,6 +17,7 @@ const DoctorDashboard: React.FC = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPrescribeModal, setShowPrescribeModal] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshKey, setRefreshKey] = useState(0);
 
@@ -132,6 +134,14 @@ const DoctorDashboard: React.FC = () => {
                                 </span>
                             </div>
                         </div>
+                        {selectedPatient && (
+                            <button
+                                onClick={() => setShowProfileModal(true)}
+                                className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:text-blue-600 transition-all"
+                            >
+                                <User size={18} /> View Profile
+                            </button>
+                        )}
                     </div>
 
                     {/* View Logic: Patient List vs Patient Details */}
@@ -408,6 +418,14 @@ const DoctorDashboard: React.FC = () => {
                             />
                         </div>
                     </div>
+                )
+            }
+            {
+                showProfileModal && selectedPatient && (
+                    <DoctorPatientProfile
+                        patientId={selectedPatient.subjectProfileId || selectedPatient.patientId}
+                        onClose={() => setShowProfileModal(false)}
+                    />
                 )
             }
         </div>
