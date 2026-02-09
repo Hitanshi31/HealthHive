@@ -462,6 +462,153 @@ const updateUserMedications = async (userId: string, newMeds: any[]) => {
     }
 };
 
+
+// --- Safety Check Logic ---
+
+export interface SafetyCheckInput {
+    medications: string[];
+    allergies: string[];
+    conditions: string[];
+    isPregnant: boolean;
+}
+
+export interface SafetyCheckOutput {
+    summary: {
+        potentialDuplication: boolean;
+        allergyConflict: boolean;
+        reviewRequired: boolean;
+    };
+    notes: string[];
+    disclaimer: string;
+}
+
+export const generateSafetyAnalysis = async (input: SafetyCheckInput, apiKey: string): Promise<SafetyCheckOutput> => {
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+        const prompt = `
+        You are an **assistive safety analysis system** inside a healthcare application called **HealthHive**.
+        
+        Your role is **strictly limited** to identifying **potential medication conflicts or risks** based on existing patient data.
+        
+        **You are NOT a medical professional, NOT a diagnostic system, and NOT a treatment recommendation engine.**
+        
+        ---
+        
+        ## 🔒 CRITICAL SAFETY CONSTRAINTS (NON-NEGOTIABLE)
+        
+        * Do **NOT** provide diagnoses
+        * Do **NOT** suggest treatments, dosage changes, or alternatives
+        * Do **NOT** instruct users to start, stop, or modify any medication
+        * Do **NOT** provide probability, severity scoring, or predictions
+        * Do **NOT** override clinician judgment
+        
+        Your output is **informational only** and must encourage **professional verification**.
+        
+        ---
+        
+        ## 🎯 INPUT CONTEXT 
+        
+        Active Medications: ${input.medications.join(', ') || 'None provided'}
+        Known Allergies: ${input.allergies.join(', ') || 'None known'}
+        Chronic Conditions: ${input.conditions.join(', ') || 'None known'}
+        Pregnancy Status: ${input.isPregnant ? 'Pregnant' : 'Not pregnant'}
+        
+        ---
+        
+        ## 🧠 ALLOWED ANALYSIS TASKS
+        
+        You may ONLY perform the following checks:
+        
+        ### 1️⃣ Duplicate Medication Detection
+        * Identify medications with:
+          * Same active ingredient
+          * Same therapeutic class
+        * Flag as: "Possible duplication — verify with clinician"
+        
+        ### 2️⃣ Allergy Conflict Detection
+        * Check if any active medication matches known allergies
+        * Flag clearly and conservatively: "Medication may conflict with recorded allergy"
+        
+        ### 3️⃣ High-Risk Combination Awareness
+        * Identify **commonly recognized** interaction categories (e.g., Blood thinners + NSAIDs, Sedatives + sedatives)
+        * Do NOT explain mechanisms
+        * Do NOT rank severity
+        
+        ### 4️⃣ Condition-Medication Caution Flags
+        * If a medication is commonly cautioned in Pregnancy or Known chronic conditions
+        * Flag as: "Use requires clinical review given patient condition"
+        
+        ---
+        
+        ## 🚫 STRICTLY DISALLOWED OUTPUTS
+        
+        You must NOT:
+        * Name alternative drugs
+        * Recommend stopping a drug
+        * Recommend emergency action
+        * Provide clinical rationale in detail
+        * Use alarming language ("Dangerous", "Fatal", "Must stop")
+        
+        ---
+        
+        ## 🧾 OUTPUT FORMAT (MANDATORY JSON)
+        
+        Respond ONLY with a valid JSON object matching this structure:
+        
+        {
+          "summary": {
+            "potentialDuplication": boolean,
+            "allergyConflict": boolean,
+            "reviewRequired": boolean
+          },
+          "notes": [
+            "Brief, neutral statement 1",
+            "Brief, neutral statement 2"
+          ],
+          "disclaimer": "This summary is for informational support only and does not replace professional medical judgment."
+        }
+        `;
+
+        const response = await axios.post(url, {
+            contents: [{ parts: [{ text: prompt }] }]
+        });
+
+        const textResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!textResponse) throw new Error("No response from AI");
+
+        // Clean JSON
+        let jsonString = textResponse;
+        const firstOpen = textResponse.indexOf('{');
+        const lastClose = textResponse.lastIndexOf('}');
+        if (firstOpen !== -1 && lastClose !== -1) {
+            jsonString = textResponse.substring(firstOpen, lastClose + 1);
+        }
+
+        const parsed = JSON.parse(jsonString);
+
+        return {
+            summary: {
+                potentialDuplication: parsed.summary?.potentialDuplication || false,
+                allergyConflict: parsed.summary?.allergyConflict || false,
+                reviewRequired: parsed.summary?.reviewRequired || false,
+            },
+            notes: Array.isArray(parsed.notes) ? parsed.notes : [],
+            disclaimer: "This summary is for informational support only and does not replace professional medical judgment."
+        };
+
+    } catch (error) {
+        console.error("Safety Analysis Failed:", error);
+        // Fallback safe response
+        return {
+            summary: { potentialDuplication: false, allergyConflict: false, reviewRequired: false },
+            notes: ["Automated safety check unavailable at this time."],
+            disclaimer: "This summary is for informational support only and does not replace professional medical judgment."
+        };
+    }
+};
+
 export default {
-    processRecord
+    processRecord,
+    generateSafetyAnalysis
 };

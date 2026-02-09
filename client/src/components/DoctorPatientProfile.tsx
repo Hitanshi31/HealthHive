@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, X, User, Phone, Calendar, Heart, AlertCircle, Droplet, Pill, AlertTriangle } from 'lucide-react';
+import { Activity, X, User, Phone, Calendar, Heart, AlertCircle, Droplet, Pill, AlertTriangle, ShieldCheck, FileText } from 'lucide-react';
 import api from '../services/api';
 
 interface DoctorPatientProfileProps {
@@ -11,6 +11,30 @@ const DoctorPatientProfile: React.FC<DoctorPatientProfileProps> = ({ patientId, 
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+
+    // Safety Check State
+    const [showSafetyModal, setShowSafetyModal] = useState(false);
+    const [safetyLoading, setSafetyLoading] = useState(false);
+    const [safetyResult, setSafetyResult] = useState<any>(null);
+
+    const handleSafetyCheck = async () => {
+        setShowSafetyModal(true);
+        setSafetyLoading(true);
+        try {
+            const res = await api.post(`/safety/check/${patientId}`);
+            setSafetyResult(res.data);
+        } catch (err) {
+            console.error("Safety check failed", err);
+            // Fallback for demo if API fails
+            setSafetyResult({
+                summary: { potentialDuplication: false, allergyConflict: false, reviewRequired: true },
+                notes: ["System error: Could not verify data.", "Please review manually."],
+                disclaimer: "This summary is for informational support only and does not replace professional medical judgment."
+            });
+        } finally {
+            setSafetyLoading(false);
+        }
+    };
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -48,13 +72,109 @@ const DoctorPatientProfile: React.FC<DoctorPatientProfileProps> = ({ patientId, 
                             <p className="text-blue-100 text-sm">Patient Health Basics & Emergency Data</p>
                         </div>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
-                    >
-                        <X size={20} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleSafetyCheck}
+                            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all backdrop-blur-md border border-white/10"
+                        >
+                            <ShieldCheck size={16} /> Check Safety
+                        </button>
+
+                        <button
+                            onClick={onClose}
+                            className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
                 </div>
+
+                {/* Safety Check Modal Override */}
+                {showSafetyModal && (
+                    <div className="absolute inset-0 z-50 bg-white/95 backdrop-blur-sm p-6 flex flex-col animate-fade-in">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <ShieldCheck size={24} className="text-indigo-600" /> Safety Analysis
+                            </h3>
+                            <button
+                                onClick={() => setShowSafetyModal(false)}
+                                className="p-2 hover:bg-slate-100 rounded-full"
+                            >
+                                <X size={24} className="text-slate-500" />
+                            </button>
+                        </div>
+
+                        {safetyLoading ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                                <p className="text-slate-500">Analyzing medications, allergies, and conditions...</p>
+                                <p className="text-xs text-slate-400 mt-2">Checking for conflicts and duplicates</p>
+                            </div>
+                        ) : safetyResult ? (
+                            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6">
+                                {/* Disclaimer is MANDATORY */}
+                                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex gap-3">
+                                    <AlertCircle className="text-blue-600 shrink-0" size={20} />
+                                    <p className="text-sm text-blue-800 font-medium">
+                                        {safetyResult.disclaimer}
+                                    </p>
+                                </div>
+
+                                {/* Summary Grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className={`p-4 rounded-xl border ${safetyResult.summary.potentialDuplication ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+                                        <div className="text-xs font-bold uppercase text-slate-500 mb-1">Duplication detected</div>
+                                        <div className={`text-lg font-bold ${safetyResult.summary.potentialDuplication ? 'text-amber-700' : 'text-slate-700'}`}>
+                                            {safetyResult.summary.potentialDuplication ? 'YES' : 'No'}
+                                        </div>
+                                    </div>
+                                    <div className={`p-4 rounded-xl border ${safetyResult.summary.allergyConflict ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+                                        <div className="text-xs font-bold uppercase text-slate-500 mb-1">Allergy Conflict</div>
+                                        <div className={`text-lg font-bold ${safetyResult.summary.allergyConflict ? 'text-red-700' : 'text-slate-700'}`}>
+                                            {safetyResult.summary.allergyConflict ? 'YES' : 'No'}
+                                        </div>
+                                    </div>
+                                    <div className={`p-4 rounded-xl border ${safetyResult.summary.reviewRequired ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200'}`}>
+                                        <div className="text-xs font-bold uppercase text-slate-500 mb-1">Review Required</div>
+                                        <div className={`text-lg font-bold ${safetyResult.summary.reviewRequired ? 'text-indigo-700' : 'text-slate-700'}`}>
+                                            {safetyResult.summary.reviewRequired ? 'YES' : 'No'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Notes */}
+                                {safetyResult.notes && safetyResult.notes.length > 0 && (
+                                    <div>
+                                        <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                            <FileText size={18} /> Analysis Notes
+                                        </h4>
+                                        <ul className="space-y-2">
+                                            {safetyResult.notes.map((note: string, idx: number) => (
+                                                <li key={idx} className="flex gap-3 text-sm text-slate-700 bg-white p-3 rounded-lg border border-slate-100 shadow-sm">
+                                                    <span className="text-indigo-500 font-bold">•</span>
+                                                    {note}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center py-10 text-slate-500">
+                                Unable to load safety analysis.
+                            </div>
+                        )}
+
+                        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
+                            <button
+                                onClick={() => setShowSafetyModal(false)}
+                                className="px-5 py-2 bg-slate-100 text-slate-700 font-bold rounded-lg hover:bg-slate-200 transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Content */}
                 <div className="p-6 overflow-y-auto custom-scrollbar">

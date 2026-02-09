@@ -11,6 +11,7 @@ import userRoutes from './routes/user.routes';
 import dependentRoutes from './routes/dependent.routes';
 import vitalRoutes from './routes/vital.routes';
 import patientProfileRoutes from './routes/patientProfile.routes';
+import safetyRoutes from './routes/safety.routes';
 
 dotenv.config();
 
@@ -30,6 +31,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/dependents', dependentRoutes);
 app.use('/api/vitals', vitalRoutes);
 app.use('/api/profile', patientProfileRoutes);
+app.use('/api/safety', safetyRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date() });
